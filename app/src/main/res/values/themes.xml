@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme. -->
+    <style name="Theme.XternalControl" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Primary brand colors. -->
+        <item name="colorPrimary">@color/neon_violet</item>
+        <item name="colorPrimaryVariant">@color/neon_pink</item>
+        <item name="colorOnPrimary">@color/text_primary</item>
+        <!-- Secondary brand colors. -->
+        <item name="colorSecondary">@color/neon_cyan</item>
+        <item name="colorSecondaryVariant">@color/neon_blue</item>
+        <item name="colorOnSecondary">@color/text_dark</item>
+
+        <!-- Status & Navigation Bar Color. -->
+        <item name="android:statusBarColor">@color/bg_obsidian</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/bg_obsidian</item>
+        
+        <!-- Backgrounds -->
+        <item name="android:windowBackground">@color/bg_obsidian</item>
+    </style>
+</resources>

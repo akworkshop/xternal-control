@@ -1,0 +1,408 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_obsidian">
+
+    <!-- 1. Launcher View Container -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/launcherContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="24dp">
+
+        <!-- Header/Status Info -->
+        <TextView
+            android:id="@+id/tvExtHeader"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="AR GLASSES VIRTUAL DISPLAY (1080P)"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <!-- App Grid -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvAppsGrid"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="16dp"
+            android:scrollbars="vertical"
+            app:layout_constraintTop_toBottomOf="@id/tvExtHeader"
+            app:layout_constraintBottom_toBottomOf="parent"
+            tools:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            tools:spanCount="5"
+            tools:listitem="@layout/item_app_grid" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- 2. Virtual Apps Overlay Container (for interactive demo) -->
+    <FrameLayout
+        android:id="@+id/virtualAppContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+
+        <!-- Simulated Web Browser App -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/layoutBrowserApp"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/bg_panel"
+            android:visibility="gone">
+
+            <!-- Browser header -->
+            <RelativeLayout
+                android:id="@+id/browserHeader"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@color/bg_card"
+                android:paddingHorizontal="16dp"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <TextView
+                    android:id="@+id/tvBrowserTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:text="Virtual Web Browser"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnBrowserClose"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:text="CLOSE [X]"
+                    android:textColor="@color/neon_danger"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:clickable="true"
+                    android:focusable="true"/>
+            </RelativeLayout>
+
+            <!-- Scrollable web contents -->
+            <ScrollView
+                android:id="@+id/browserScrollView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                app:layout_constraintTop_toBottomOf="@id/browserHeader"
+                app:layout_constraintBottom_toBottomOf="parent">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="24dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SCROLL DEMO PAGE"
+                        android:textColor="@color/neon_cyan"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="This is a scrollable mock browser page. Drag two fingers up or down on the main device trackpad to scroll this content smoothly.\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam ac sapien et arcu interdum consectetur a ac metus. Integer volutpat sem quis tempor fringilla. Proin imperdiet sem elit, sed elementum dui finibus id. Integer varius scelerisque finibus.\n\nUt imperdiet nunc sed nulla condimentum, vitae tincidunt tortor porta. Morbi feugiat pretium mi ac efficitur. Integer imperdiet urna non erat rutrum eleifend.\n\nNam vel felis at ante dictum lacinia. Donec a tincidunt lacus, eget tristique ex. Mauris vulputate ac turpis et sollicitudin. Curabitur sed facilisis elit. In interdum massa eu ex pulvinar, non efficitur ipsum varius. Mauris at libero elit.\n\nVestibulum ut egestas urna. Duis vel facilisis quam. Vestibulum aliquet scelerisque ipsum sit amet efficitur. Sed finibus nisl lorem, eget tristique ex rhoncus facilisis. Sed vulputate sapien sed magna hendrerit luctus."
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp"
+                        android:lineSpacingExtra="6dp" />
+
+                    <!-- Clickable test button in browser -->
+                    <Button
+                        android:id="@+id/btnBrowserClickMe"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:backgroundTint="@color/neon_violet"
+                        android:text="CLICK ME VIA TRACKPAD"
+                        android:textColor="@color/text_primary" />
+                </LinearLayout>
+            </ScrollView>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- Simulated Notes App -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/layoutNotesApp"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/bg_panel"
+            android:visibility="gone">
+
+            <RelativeLayout
+                android:id="@+id/notesHeader"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@color/bg_card"
+                android:paddingHorizontal="16dp"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:text="Virtual Notes Pad"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnNotesClose"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:text="CLOSE [X]"
+                    android:textColor="@color/neon_danger"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:clickable="true"
+                    android:focusable="true"/>
+            </RelativeLayout>
+
+            <!-- Text area to receive keyboard typing -->
+            <EditText
+                android:id="@+id/etNotesArea"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_margin="16dp"
+                android:background="@drawable/bg_glass_card"
+                android:gravity="top|start"
+                android:hint="Type inside this note box using the main controller keyboard..."
+                android:textColorHint="@color/text_secondary"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:padding="16dp"
+                android:focusable="true"
+                android:clickable="true"
+                app:layout_constraintTop_toBottomOf="@id/notesHeader"
+                app:layout_constraintBottom_toBottomOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- Simulated Map App -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/layoutMapApp"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/bg_panel"
+            android:visibility="gone">
+
+            <RelativeLayout
+                android:id="@+id/mapHeader"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@color/bg_card"
+                android:paddingHorizontal="16dp"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:text="Virtual Satellite Map"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnMapClose"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:text="CLOSE [X]"
+                    android:textColor="@color/neon_danger"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:clickable="true"
+                    android:focusable="true"/>
+            </RelativeLayout>
+
+            <!-- Map View Canvas -->
+            <FrameLayout
+                android:id="@+id/mapCanvas"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:background="#161B2E"
+                app:layout_constraintTop_toBottomOf="@id/mapHeader"
+                app:layout_constraintBottom_toBottomOf="parent">
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_trackpad_grid"
+                    android:alpha="0.15" />
+
+                <!-- Grid/Lines to simulate vector map -->
+                <TextView
+                    android:id="@+id/tvMapCoords"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="SATELLITE POSITION: SECTOR 4-B\nZoom Level: 1.0x"
+                    android:textColor="@color/neon_emerald"
+                    android:textSize="14sp"
+                    android:gravity="center"
+                    android:alpha="0.7"
+                    android:lineSpacingExtra="4dp" />
+
+                <!-- Zoom Controls -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_gravity="end|bottom"
+                    android:layout_margin="24dp">
+
+                    <Button
+                        android:id="@+id/btnMapZoomIn"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:text="+"
+                        android:textColor="@color/text_primary"
+                        android:backgroundTint="@color/bg_card"
+                        android:textSize="18sp"
+                        app:cornerRadius="12dp"/>
+
+                    <Button
+                        android:id="@+id/btnMapZoomOut"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:text="-"
+                        android:textColor="@color/text_primary"
+                        android:backgroundTint="@color/bg_card"
+                        android:textSize="18sp"
+                        app:cornerRadius="12dp"/>
+                </LinearLayout>
+            </FrameLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </FrameLayout>
+
+    <!-- Floating Navigation Bar for Virtual Screen -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cvExtNavBar"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:visibility="gone"
+        android:elevation="100dp"
+        app:cardCornerRadius="20dp"
+        app:cardBackgroundColor="@color/bg_card">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="16dp">
+
+            <TextView
+                android:id="@+id/btnExtNavBack"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="← BACK"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground"/>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="20dp"
+                android:background="@color/glass_white_border"/>
+
+            <TextView
+                android:id="@+id/btnExtNavHome"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="HOME ⌂"
+                android:textColor="@color/neon_cyan"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground"/>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- 3. Virtual Mouse Cursor pointer overlay -->
+    <ImageView
+        android:id="@+id/ivCursor"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/bg_cursor"
+        android:elevation="99dp" />
+
+    <!-- 4. Faint cursor ripple visual indicator for clicks -->
+    <View
+        android:id="@+id/viewCursorRipple"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/bg_cursor"
+        android:alpha="0"
+        android:elevation="98dp" />
+
+    <!-- 5. Right Click Context Menu -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cvContextMenu"
+        android:layout_width="160dp"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:elevation="100dp"
+        app:cardCornerRadius="12dp"
+        app:cardBackgroundColor="@color/bg_card">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="6dp">
+
+            <TextView
+                android:id="@+id/tvContextBack"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:gravity="center_vertical"
+                android:paddingStart="12dp"
+                android:text="← Back"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground" />
+
+            <TextView
+                android:id="@+id/tvContextHome"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:gravity="center_vertical"
+                android:paddingStart="12dp"
+                android:text="⌂ Return to Launcher"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackground" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+</FrameLayout>

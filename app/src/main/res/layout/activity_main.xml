@@ -1,0 +1,491 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:background="@color/bg_obsidian"
+    tools:context=".MainActivity">
+
+    <!-- Left Side: Tablet/Phone Controller Panel -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/controllerPanel"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:padding="16dp">
+
+        <!-- Header Section (Always Visible) -->
+        <LinearLayout
+            android:id="@+id/headerLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <TextView
+                android:id="@+id/tvTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="XTERNAL CONTROL"
+                android:textColor="@color/text_primary"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.1"/>
+
+            <!-- Connection Status Badge -->
+            <TextView
+                android:id="@+id/tvStatusBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_rounded_search"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="6dp"
+                android:text="DISCONNECTED"
+                android:textColor="@color/neon_danger"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- TabLayout for Section Switching (Always Visible) -->
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/controllerTabLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@android:color/transparent"
+            app:tabBackground="@color/bg_panel"
+            app:tabTextColor="@color/text_secondary"
+            app:tabSelectedTextColor="@color/neon_cyan"
+            app:tabIndicatorColor="@color/neon_cyan"
+            app:tabIndicatorHeight="3dp"
+            app:tabGravity="fill"
+            app:tabMode="fixed"
+            app:layout_constraintTop_toBottomOf="@id/headerLayout"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"/>
+
+        <!-- Tab 1: Setup & Permissions -->
+        <ScrollView
+            android:id="@+id/tabSetupContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="12dp"
+            android:fillViewport="true"
+            android:scrollbars="none"
+            app:layout_constraintTop_toBottomOf="@id/controllerTabLayout"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- Connection Control Card -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/cardConnection"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:cardCornerRadius="16dp"
+                    app:cardBackgroundColor="@color/bg_panel">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="CONNECTION STATUS"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.05"/>
+
+                        <TextView
+                            android:id="@+id/tvConnectionInfo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="No physical external display found."
+                            android:textColor="@color/text_primary"
+                            android:textSize="13sp" />
+
+                        <Button
+                            android:id="@+id/btnSimulate"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="12dp"
+                            android:backgroundTint="@color/neon_violet"
+                            android:text="SIMULATE GLASSES"
+                            android:textColor="@color/text_primary"
+                            android:textSize="12sp"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="0dp"
+                            app:cornerRadius="8dp" />
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <!-- Permissions Card -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/cardPermissions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardCornerRadius="16dp"
+                    app:cardBackgroundColor="@color/bg_panel">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="REQUIRED PERMISSIONS"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.05"/>
+
+                        <!-- System Overlay Row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="10dp">
+
+                            <TextView
+                                android:id="@+id/tvPermOverlay"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="System Overlay: Missing"
+                                android:textColor="@color/neon_warning"
+                                android:textSize="12sp" />
+
+                            <Button
+                                android:id="@+id/btnGrantOverlay"
+                                android:layout_width="wrap_content"
+                                android:layout_height="32dp"
+                                android:backgroundTint="@color/glass_white_fill_active"
+                                android:text="GRANT"
+                                android:textColor="@color/text_primary"
+                                android:textSize="10sp"
+                                android:paddingHorizontal="12dp"
+                                android:paddingVertical="0dp"
+                                app:cornerRadius="6dp" />
+                        </LinearLayout>
+
+                        <!-- Accessibility Service Row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="10dp">
+
+                            <TextView
+                                android:id="@+id/tvPermAccessibility"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Accessibility: Inactive"
+                                android:textColor="@color/neon_warning"
+                                android:textSize="12sp" />
+
+                            <Button
+                                android:id="@+id/btnGrantAccessibility"
+                                android:layout_width="wrap_content"
+                                android:layout_height="32dp"
+                                android:backgroundTint="@color/glass_white_fill_active"
+                                android:text="ENABLE"
+                                android:textColor="@color/text_primary"
+                                android:textSize="10sp"
+                                android:paddingHorizontal="12dp"
+                                android:paddingVertical="0dp"
+                                app:cornerRadius="6dp" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <!-- Donation Card -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/cardDonation"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    app:cardCornerRadius="16dp"
+                    app:cardBackgroundColor="@color/bg_panel">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="SUPPORT THE CREATOR"
+                            android:textColor="@color/neon_cyan"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.05"/>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="If you find this app useful, please consider supporting the creator. Your contributions help my family with our special needs child. Thank you so much!"
+                            android:textColor="@color/text_primary"
+                            android:textSize="12sp"
+                            android:lineSpacingExtra="3dp" />
+
+                        <Button
+                            android:id="@+id/btnDonate"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="12dp"
+                            android:backgroundTint="@color/neon_emerald"
+                            android:text="☕ BUY ME A COFFEE"
+                            android:textColor="@color/text_primary"
+                            android:textSize="12sp"
+                            android:paddingHorizontal="16dp"
+                            android:paddingVertical="0dp"
+                            app:cornerRadius="8dp" />
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- Tab 2: Apps Launcher -->
+        <LinearLayout
+            android:id="@+id/tabAppsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:orientation="vertical"
+            android:layout_marginTop="12dp"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/controllerTabLayout"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+
+
+            <TextView
+                android:id="@+id/tvAppSelectionHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                android:text="APP SELECTOR (LONG PRESS FOR FAVOURITE)"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.05"/>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvAppsHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scrollbars="vertical"
+                tools:listitem="@layout/item_app_grid"/>
+        </LinearLayout>
+
+        <!-- Tab 3: Trackpad & Controls -->
+        <LinearLayout
+            android:id="@+id/tabTrackpadContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:orientation="vertical"
+            android:layout_marginTop="12dp"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/controllerTabLayout"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <!-- Trackpad Frame (Fills space) -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cvTrackpad"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginBottom="8dp"
+                app:cardCornerRadius="24dp"
+                app:cardBackgroundColor="@color/bg_trackpad">
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_trackpad_grid" />
+
+                    <View
+                        android:layout_width="120dp"
+                        android:layout_height="120dp"
+                        android:layout_gravity="center"
+                        android:alpha="0.03"
+                        android:background="@drawable/bg_cursor" />
+
+                    <View
+                        android:id="@+id/viewCursorMirror"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:background="@drawable/bg_cursor"
+                        android:alpha="0.2"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/tvTrackpadInstruction"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="TRACKPAD MODE INACTIVE\nConnect glasses or enable simulation"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:gravity="center"
+                        android:lineSpacingExtra="4dp" />
+                </FrameLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- Click Buttons -->
+            <LinearLayout
+                android:id="@+id/layoutClickButtons"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/btnLeftClick"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1.5"
+                    android:layout_marginEnd="6dp"
+                    app:cardCornerRadius="14dp"
+                    app:cardBackgroundColor="@color/bg_panel"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?android:attr/selectableItemBackground">
+                    
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:text="LEFT CLICK"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.05"/>
+                </androidx.cardview.widget.CardView>
+
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/btnRightClick"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    app:cardCornerRadius="14dp"
+                    app:cardBackgroundColor="@color/bg_panel"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?android:attr/selectableItemBackground">
+                    
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:text="RIGHT CLICK"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.05"/>
+                </androidx.cardview.widget.CardView>
+            </LinearLayout>
+
+            <!-- Navigation buttons at bottom -->
+            <LinearLayout
+                android:id="@+id/trackpadNavLayout"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_glass_card"
+                android:paddingHorizontal="12dp"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="REMOTE CONTROLS"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05"/>
+
+                <!-- Remote Back Button -->
+                <TextView
+                    android:id="@+id/btnMainBack"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_rounded_search"
+                    android:gravity="center"
+                    android:text="←"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:clickable="true"
+                    android:focusable="true"/>
+
+                <!-- Remote Home Button -->
+                <TextView
+                    android:id="@+id/btnMainHome"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_rounded_search"
+                    android:gravity="center"
+                    android:text="⌂"
+                    android:textColor="@color/neon_cyan"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:clickable="true"
+                    android:focusable="true"/>
+
+
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Right Side / Bottom: Virtual Glasses Display Simulator -->
+    <FrameLayout
+        android:id="@+id/simulationContainer"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1.3"
+        android:layout_margin="16dp"
+        android:background="@drawable/bg_glass_card"
+        android:visibility="gone"/>
+
+</LinearLayout>

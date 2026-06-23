@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="8dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:background="?android:attr/selectableItemBackground">
+
+    <androidx.cardview.widget.CardView
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        app:cardCornerRadius="14dp"
+        app:cardBackgroundColor="@color/bg_card"
+        app:cardElevation="0dp">
+
+        <ImageView
+            android:id="@+id/ivAppIcon"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:contentDescription="App Icon" />
+
+        <ImageView
+            android:id="@+id/ivFavIndicator"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="2dp"
+            android:src="@android:drawable/btn_star_big_on"
+            android:visibility="gone"
+            android:contentDescription="Favorite Indicator" />
+    </androidx.cardview.widget.CardView>
+
+    <TextView
+        android:id="@+id/tvAppName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center"
+        android:text="App Name"
+        android:textColor="@color/text_primary"
+        android:textSize="12sp"
+        android:ellipsize="end"
+        android:maxLines="1" />
+</LinearLayout>

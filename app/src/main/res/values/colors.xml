@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Backgrounds -->
+    <color name="bg_obsidian">#0C0D12</color>
+    <color name="bg_panel">#161923</color>
+    <color name="bg_card">#202434</color>
+    <color name="bg_trackpad">#08090D</color>
+    
+    <!-- Neon Accent Colors -->
+    <color name="neon_violet">#8A2387</color>
+    <color name="neon_pink">#E94057</color>
+    <color name="neon_orange">#F27121</color>
+    <color name="neon_cyan">#00F2FE</color>
+    <color name="neon_blue">#4FACFE</color>
+    <color name="neon_emerald">#00FF87</color>
+    <color name="neon_warning">#FFA000</color>
+    <color name="neon_danger">#FF3366</color>
+    
+    <!-- Text Colors -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#9DA4B4</color>
+    <color name="text_dark">#121212</color>
+    
+    <!-- Glassmorphic Elements -->
+    <color name="glass_white_border">#20FFFFFF</color>
+    <color name="glass_white_fill">#10FFFFFF</color>
+    <color name="glass_white_fill_active">#25FFFFFF</color>
+</resources>
