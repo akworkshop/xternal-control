@@ -104,6 +104,32 @@ Due to its remote control nature, **Xternal Control** requires two key Android p
 
 ---
 
+## ❓ FAQ (Frequently Asked Questions)
+
+#### Q: Why does Google Play Protect show a warning during installation?
+**A:** Since **Xternal Control** is a sideloaded APK (not yet published on the Google Play Store), Google flags it as being from an "Unknown Developer." Furthermore, because the app requires Android's Accessibility Services to inject cursor clicks and gestures on your behalf, it requests elevated system permissions. The app is completely safe and ad-free. During installation, click the details dropdown and select **"Install anyway"** to proceed.
+
+#### Q: Do I need to be rooted to use this?
+**A:** No, root access is not required! The app utilizes standard Android System Overlay and Accessibility Service APIs to display the cursor and simulate touches on the external display.
+
+#### Q: Can I run *any* application on my external screen?
+**A:** Yes! Unlike proprietary AR/VR launchers (such as SpaceWalker) which restrict you to their custom browsers and media players, Xternal Control allows you to launch and run any third-party app installed on your device (e.g., YouTube, Chrome, maps, games, etc.) in true widescreen.
+
+#### Q: How do I connect to my TV or AR Glasses?
+**A:** You can connect in two ways:
+1. **Wired Connection**: Plug in your smart AR glasses (XREAL, Viture, Rokid) or external monitor via USB-C DisplayPort (DP Alt Mode) or HDMI.
+2. **Wireless Connection**: Start a screen cast or wireless display mirroring connection to your TV, Chromecast, or Miracast receiver. The app will automatically capture the widescreen canvas.
+
+#### Q: Why is my trackpad not moving the cursor or clicking?
+**A:** Please double-check that you have granted both permissions under the **SETUP** tab:
+1. **System Overlay** (allows the cursor to draw on top of other apps).
+2. **Accessibility Service** (allows the app to simulate click, scroll, and pinch-to-zoom gestures). If accessibility becomes inactive, toggle it OFF and ON again in your Android System Settings.
+
+#### Q: Is the app really free and ad-free?
+**A:** Yes, it is 100% free, has zero ads, and collects no data. If you enjoy using it, you can optionally support the developer's family (who raise a special needs child) via [Buy Me a Coffee](https://buymeacoffee.com/akworkshop).
+
+---
+
 ## ☕ Support the Creator
 
 If you find this project useful, please consider supporting the creator! Your contributions help support my family with our special needs child.
