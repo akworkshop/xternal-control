@@ -1,8 +1,23 @@
 # Xternal Control 📱🕶️
 
-**Xternal Control** is a premium, obsidian-themed Android utility application designed to control external displays, projectors, smart AR glasses, or **wireless screen casts (Chromecast, Miracast, wireless displays)** using a phone or tablet as a smart trackpad, launcher, and keyboard. 
+**Xternal Control** is a premium, ad-free, obsidian-themed Android utility application designed to control external displays, projectors, smart AR glasses (like XREAL, Viture), or **wireless screen casts (TVs, Chromecast, Miracast)** using your phone or tablet as a smart trackpad, launcher, and keyboard.
 
-It provides an intuitive interface tailored for multi-display Android systems, allowing you to launch applications, navigate system UI, scroll feeds, swipe galleries, and zoom maps on the secondary screen smoothly and with minimal latency.
+---
+
+## 📺 Why Xternal Control? (The Problem vs. The Solution)
+
+### The Problem: Standard Screen Mirroring
+Whenever you cast your Android phone to a big screen, monitor, or AR glasses, it usually mirrors your phone screen's vertical aspect ratio. This results in huge black bars on the left and right, wasting screen real estate. 
+
+When plugging into AR glasses (like Viture XR glasses), standard portrait mirroring crops the display. Furthermore, existing VR/AR launcher apps (like SpaceWalker) might offer a fullscreen desktop, but they restrict you to their built-in browser or custom apps—you can't select and run *any* third-party app you want.
+
+### The Solution: True Fullscreen Extension
+**Xternal Control** treats the external TV, monitor, or XR glasses as an independent **extension monitor** using its native landscape resolution (e.g., 1080p). You get a full, cinematic widescreen experience! Open **any** application installed on your phone on the big screen and control it smoothly using your phone as a high-precision trackpad.
+
+| Standard Mirroring (Black Bars) | Xternal Control (True Widescreen) |
+|:---:|:---:|
+| ![Mirrored Display](screenshots/mirrored_display.jpg) | ![Xternal Control Fullscreen](screenshots/connected_display.jpg) |
+| Standard portrait mirroring mirrors the aspect ratio | Xternal Control unlocks the native fullscreen resolution |
 
 ---
 
@@ -27,6 +42,17 @@ It provides an intuitive interface tailored for multi-display Android systems, a
 
 ---
 
+## 📸 App Interface
+
+Take control of your external display with our clean, high-contrast three-tab interface:
+
+| 1. SETUP | 2. APPS Launcher | 3. REMOTE Trackpad |
+|:---:|:---:|:---:|
+| ![Setup Tab](screenshots/setup_tab.jpg) | ![Apps Tab](screenshots/apps_tab.jpg) | ![Remote Tab](screenshots/remote_tab.jpg) |
+| Grant overlay & accessibility permissions | Fast search, favorites first, and recent app sorting | Spacious trackpad, left/right clicks, & navigation buttons |
+
+---
+
 ## 🛠️ Requirements & Setup
 
 ### Permissions Required
@@ -41,7 +67,12 @@ Due to its remote control nature, **Xternal Control** requires two key Android p
 
 ## 📲 Installation
 
-1. Download the latest release signed package `app-release.apk` from the **Releases** tab.
+> [!IMPORTANT]
+> **Ad-Free and Play Protect Installation Warning**
+> * **100% Ad-Free**: This app has absolutely no advertisements, trackers, or hidden fees.
+> * **"Install anyway" Warning**: Because this app requires system accessibility control to inject cursor gestures and clicks on your behalf, Google Play Protect might flag it as coming from an "Unknown Developer." During installation, click the details arrow and select **"Install anyway"** to proceed.
+
+1. Download the latest signed package `app-release.apk` from the **Releases** tab.
 2. Sideload the APK onto your Android phone or tablet.
 3. Open the app, navigate to the **SETUP** tab, and toggle the permissions:
    - Grant **System Overlay**.
