@@ -19,6 +19,15 @@ When plugging into AR glasses (like Viture XR glasses), standard portrait mirror
 | ![Mirrored Display](screenshots/mirrored_display.jpg) | ![Xternal Control Fullscreen](screenshots/connected_display.jpg) |
 | Standard portrait mirroring mirrors the aspect ratio | Xternal Control unlocks the native fullscreen resolution |
 
+### Control the External Screen using Phone Trackpad
+Once connected, switch to the **REMOTE** tab to turn your phone into a low-latency, high-precision trackpad. Move the cursor, click, scroll, and pinch-to-zoom directly inside any third-party app (like YouTube, Chrome, or maps) running on the big screen.
+
+<p align="center">
+  <img src="screenshots/trackpad_control.jpg" alt="Control the external screen using phone trackpad" width="450" />
+  <br>
+  <em>Control the external screen using your phone's trackpad</em>
+</p>
+
 ---
 
 ## 🚀 Key Features
