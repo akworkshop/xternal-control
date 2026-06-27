@@ -68,7 +68,7 @@ Due to its remote control nature, **Xternal Control** requires two key Android p
 
 If you find this project useful, please consider supporting the creator! Your contributions help support my family with our special needs child.
 
-* **Buy Me a Coffee**: [buymeacoffee.com/piccohan107](https://buymeacoffee.com/piccohan107)
+* **Buy Me a Coffee**: [buymeacoffee.com/akworkshop](https://buymeacoffee.com/akworkshop)
 
 ---
 

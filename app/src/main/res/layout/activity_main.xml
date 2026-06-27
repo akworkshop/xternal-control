@@ -262,7 +262,7 @@
                             android:layout_marginTop="12dp"
                             android:backgroundTint="@color/neon_emerald"
                             android:text="☕ BUY ME A COFFEE"
-                            android:textColor="@color/text_primary"
+                            android:textColor="@color/text_dark"
                             android:textSize="12sp"
                             android:paddingHorizontal="16dp"
                             android:paddingVertical="0dp"

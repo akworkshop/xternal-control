@@ -174,7 +174,7 @@ class MainActivity : AppCompatActivity() {
 
         btnDonate = findViewById(R.id.btnDonate)
         btnDonate.setOnClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/piccohan107"))
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/akworkshop"))
             startActivity(intent)
         }
 
@@ -991,8 +991,8 @@ class MainActivity : AppCompatActivity() {
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle("Support the Creator")
             .setMessage("Do you like using Xternal Control?\n\nIf this app has been useful to you, please consider supporting the creator. Your support makes a meaningful contribution to my family with a special needs child.\n\nEverything remains fully free to use!")
-            .setPositiveButton("☕ Support on Buy Me a Coffee") { _, _ ->
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/piccohan107"))
+            .setPositiveButton("☕ Buy Me a Coffee") { _, _ ->
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/akworkshop"))
                 startActivity(intent)
             }
             .setNegativeButton("Maybe Later", null)

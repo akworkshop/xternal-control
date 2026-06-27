@@ -18,5 +18,18 @@
         
         <!-- Backgrounds -->
         <item name="android:windowBackground">@color/bg_obsidian</item>
+
+        <!-- Alert Dialog Theme -->
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.App.MaterialAlertDialog</item>
+    </style>
+
+    <!-- Custom theme overlay for MaterialAlertDialog to improve button contrast -->
+    <style name="ThemeOverlay.App.MaterialAlertDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <!-- Text color of the buttons (Primary brand color for dialogs) -->
+        <item name="colorPrimary">@color/neon_cyan</item>
+        <!-- Background color of the dialog window -->
+        <item name="colorSurface">@color/bg_panel</item>
+        <!-- Color for title and message text -->
+        <item name="colorOnSurface">@color/text_primary</item>
     </style>
 </resources>
