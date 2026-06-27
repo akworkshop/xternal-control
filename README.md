@@ -9,7 +9,9 @@
 ### The Problem: Standard Screen Mirroring
 Whenever you cast your Android phone to a big screen, monitor, or AR glasses, it usually mirrors your phone screen's vertical aspect ratio. This results in huge black bars on the left and right, wasting screen real estate. 
 
-When plugging into AR glasses (like Viture XR glasses), standard portrait mirroring crops the display. Furthermore, existing VR/AR launcher apps (like SpaceWalker) might offer a fullscreen desktop, but they restrict you to their built-in browser or custom apps—you can't select and run *any* third-party app you want.
+Even if you rotate your phone to landscape mode, the resolution and aspect ratio still won't match the glasses. Because modern phones have different aspect ratios (such as 19.5:9, 21:9, or square foldables like the Vivo X Fold) compared to a standard 16:9 screen, the mirrored display ends up letterboxed with black bars on all sides, making the image look much smaller than the glasses' actual display canvas.
+
+Furthermore, existing VR/AR launcher apps (like SpaceWalker) might offer a fullscreen desktop, but they restrict you to their built-in browser or custom apps—you can't select and run *any* third-party app you want.
 
 ### The Solution: True Fullscreen Extension
 **Xternal Control** treats the external TV, monitor, or XR glasses as an independent **extension monitor** using its native landscape resolution (e.g., 1080p). You get a full, cinematic widescreen experience! Open **any** application installed on your phone on the big screen and control it smoothly using your phone as a high-precision trackpad.
