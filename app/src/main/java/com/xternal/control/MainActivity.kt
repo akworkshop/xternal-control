@@ -293,14 +293,22 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnMainHome).setOnClickListener {
             if (externalDisplayId != -1) {
-                // Brings ExternalActivity home launcher back to foreground on the glasses
-                val options = ActivityOptions.makeBasic()
-                options.launchDisplayId = externalDisplayId
-                val intent = Intent(this, ExternalActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                try {
+                    // Brings ExternalActivity home launcher back to foreground on the glasses
+                    val options = ActivityOptions.makeBasic()
+                    options.launchDisplayId = externalDisplayId
+                    val intent = Intent(this, ExternalActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                    }
+                    startActivity(intent, options.toBundle())
+                    Toast.makeText(this, "Glasses returned to Launcher Grid", Toast.LENGTH_SHORT).show()
+                } catch (e: SecurityException) {
+                    e.printStackTrace()
+                    Toast.makeText(this, "Security restriction: Cannot launch on secondary display", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    Toast.makeText(this, "Failed to return home: ${e.message}", Toast.LENGTH_LONG).show()
                 }
-                startActivity(intent, options.toBundle())
-                Toast.makeText(this, "Glasses returned to Launcher Grid", Toast.LENGTH_SHORT).show()
             }
             if (isSimulating) {
                 closeSimulatedApps()
@@ -399,12 +407,28 @@ class MainActivity : AppCompatActivity() {
             tabLayout.getTabAt(1)?.select()
 
             // Auto-launch ExternalActivity on target display
-            val options = ActivityOptions.makeBasic()
-            options.launchDisplayId = externalDisplayId
-            val intent = Intent(this, ExternalActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            try {
+                val options = ActivityOptions.makeBasic()
+                options.launchDisplayId = externalDisplayId
+                val intent = Intent(this, ExternalActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                }
+                startActivity(intent, options.toBundle())
+            } catch (e: SecurityException) {
+                e.printStackTrace()
+                Toast.makeText(this, "Security restriction: Cannot launch External View on secondary display. Fallback to standard launch...", Toast.LENGTH_LONG).show()
+                try {
+                    val intent = Intent(this, ExternalActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                } catch (ex: Exception) {
+                    ex.printStackTrace()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(this, "Failed to launch on glasses display: ${e.message}", Toast.LENGTH_LONG).show()
             }
-            startActivity(intent, options.toBundle())
         } else {
             if (!isSimulating) {
                 externalDisplayId = -1
