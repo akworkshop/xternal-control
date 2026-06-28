@@ -161,6 +161,7 @@ class ExternalActivity : AppCompatActivity() {
             apps.add(appInfo)
         }
         allApps = apps.distinctBy { it.packageName }
+        applyPlayStoreAppRestrictions()
 
         // External launcher uses a 5-column grid layout
         gridAdapter = AppListAdapter(
@@ -347,6 +348,11 @@ class ExternalActivity : AppCompatActivity() {
     }
 
     private fun launchApp(packageName: String) {
+        val app = allApps.find { it.packageName == packageName }
+        if (app != null && app.isLocked) {
+            showProUpgradeDialog()
+            return
+        }
         // Track recents: move to start
         recentPackages.remove(packageName)
         recentPackages.add(0, packageName)
@@ -449,6 +455,43 @@ class ExternalActivity : AppCompatActivity() {
         val rx = location[0]
         val ry = location[1]
         return x >= rx && x <= rx + view.width && y >= ry && y <= ry + view.height
+    }
+
+    private fun applyPlayStoreAppRestrictions() {
+        if (BuildConfig.FLAVOR != "playstore") return
+
+        val preferredPackages = listOf(
+            "com.google.android.youtube",
+            "com.android.chrome",
+            "com.google.android.apps.maps",
+            "org.mozilla.firefox",
+            "com.google.android.googlequicksearchbox",
+            "com.android.settings"
+        )
+
+        val allowedPackages = allApps.filter { app ->
+            preferredPackages.contains(app.packageName)
+        }.map { it.packageName }.toMutableSet()
+
+        if (allowedPackages.size < 4) {
+            val otherApps = allApps.filter { !allowedPackages.contains(it.packageName) }
+            for (app in otherApps) {
+                if (allowedPackages.size >= 4) break
+                allowedPackages.add(app.packageName)
+            }
+        }
+
+        for (app in allApps) {
+            app.isLocked = !allowedPackages.contains(app.packageName)
+        }
+    }
+
+    private fun showProUpgradeDialog() {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Pro Feature")
+            .setMessage("Launching this app is a Pro feature.\n\nIn-app purchases are coming soon to unlock unlimited apps!")
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun dpToPx(dp: Int): Int {

@@ -30,6 +30,13 @@ class AppListAdapter(
         val app = apps[position]
         holder.tvAppName.text = app.label
         holder.ivAppIcon.setImageDrawable(app.icon)
+        
+        if (app.isLocked) {
+            holder.itemView.alpha = 0.4f
+        } else {
+            holder.itemView.alpha = 1.0f
+        }
+        
         holder.itemView.setOnClickListener { onItemClick(app) }
         
         holder.itemView.setOnLongClickListener {
