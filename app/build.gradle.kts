@@ -29,11 +29,11 @@ android {
     productFlavors {
         create("github") {
             dimension = "distribution"
-            applicationIdSuffix = ".github"
-            versionNameSuffix = "-github"
         }
         create("playstore") {
             dimension = "distribution"
+            applicationIdSuffix = ".play"
+            versionNameSuffix = "-play"
         }
     }
 
