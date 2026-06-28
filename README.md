@@ -89,6 +89,15 @@ Due to its remote control nature, **Xternal Control** requires two key Android p
    - Grant **System Overlay**.
    - Enable **Xternal Control** in your system **Accessibility** settings.
 
+### ⚠️ Sideloading & Permission Troubleshooting (Android 13+)
+
+If you install the app from GitHub (sideloaded APK), Android 13+ may block you from enabling the Accessibility permission, showing a **"Restricted setting"** popup. 
+
+| 1. Bypass Play Protect Block | 2. Allow Restricted Settings |
+|:---:|:---:|
+| ![Play Protect Settings](screenshots/play_protect_settings.jpg) | ![Allow Restricted Settings](screenshots/restricted_settings.jpg) |
+| **Play Protect Warning**: If the install is blocked, temporarily disable **Scan apps with Play Protect** in your Play Store settings. | **Restricted Setting Greyed Out**: Go to your phone's **Settings > Apps > Xternal Control**, and toggle/tap **"Allow restricted settings"** (found at the bottom or inside the top-right three-dots menu). |
+
 ---
 
 ## 🕹️ How to Use
