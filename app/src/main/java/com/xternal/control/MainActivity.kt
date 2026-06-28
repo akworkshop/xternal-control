@@ -111,6 +111,7 @@ class MainActivity : AppCompatActivity() {
     private var simMapCoords: TextView? = null
     private var simExtNavBar: View? = null
     private var simMapZoomLevel = 1.0f
+    private var appSearchQuery: String = ""
 
     // System Overlay Cursor for Real Secondary Display
     private var overlayCursorView: ImageView? = null
@@ -187,6 +188,16 @@ class MainActivity : AppCompatActivity() {
         tabSetupContainer = findViewById(R.id.tabSetupContainer)
         tabAppsContainer = findViewById(R.id.tabAppsContainer)
         tabTrackpadContainer = findViewById(R.id.tabTrackpadContainer)
+
+        val etAppSearch = findViewById<EditText>(R.id.etAppSearch)
+        etAppSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                appSearchQuery = s?.toString() ?: ""
+                sortAndRefreshAppLists()
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
 
         // Setup Tab Items
         tabLayout.addTab(tabLayout.newTab().setText("SETUP"))
@@ -1081,18 +1092,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun sortAndRefreshAppLists() {
-        // Set isFavourite status on allApps based on favouritePackages
-        for (app in allApps) {
+        // Filter apps based on search query
+        val filteredApps = if (appSearchQuery.isEmpty()) {
+            allApps
+        } else {
+            allApps.filter { it.label.contains(appSearchQuery, ignoreCase = true) }
+        }
+
+        // Set isFavourite status on filteredApps based on favouritePackages
+        for (app in filteredApps) {
             app.isFavourite = favouritePackages.contains(app.packageName)
         }
 
-        // Re-sort the app list:
         // Re-sort the app list:
         // 1. Unlocked trial apps first (Play Store flavor only)
         // 2. Favourites next (sorted alphabetically by label)
         // 3. Recents next (sorted by position in recentPackages list)
         // 4. The rest alphabetically by label
-        val sortedApps = allApps.sortedWith(compareBy<AppInfo> { it.isLocked }
+        val sortedApps = filteredApps.sortedWith(compareBy<AppInfo> { it.isLocked }
             .thenByDescending { it.isFavourite }
             .thenBy { app ->
                 val index = recentPackages.indexOf(app.packageName)

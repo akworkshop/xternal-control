@@ -298,6 +298,21 @@
                 android:textStyle="bold"
                 android:letterSpacing="0.05"/>
 
+            <EditText
+                android:id="@+id/etAppSearch"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_rounded_search"
+                android:hint="Search apps..."
+                android:textColorHint="@color/text_secondary"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp"
+                android:paddingHorizontal="16dp"
+                android:inputType="text"
+                android:maxLines="1"
+                android:imeOptions="actionSearch"/>
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvAppsHorizontal"
                 android:layout_width="match_parent"

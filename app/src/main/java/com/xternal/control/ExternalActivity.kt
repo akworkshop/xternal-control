@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.SystemClock
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -41,6 +43,7 @@ class ExternalActivity : AppCompatActivity() {
     private var recentPackages: ArrayList<String> = ArrayList()
     private var favouritePackages: ArrayList<String> = ArrayList()
     private var sharedPrefsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var appSearchQuery: String = ""
     
     // Bounds & coordinates
     private var screenWidth = 1920f
@@ -85,6 +88,16 @@ class ExternalActivity : AppCompatActivity() {
         layoutMapApp = findViewById(R.id.layoutMapApp)
         tvMapCoords = findViewById(R.id.tvMapCoords)
         cvExtNavBar = findViewById(R.id.cvExtNavBar)
+
+        val etExtAppSearch = findViewById<EditText>(R.id.etExtAppSearch)
+        etExtAppSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                appSearchQuery = s?.toString() ?: ""
+                sortAndRefreshAppLists()
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
 
         // Capture display dimensions once loaded
         rootContainer.post {
@@ -196,8 +209,15 @@ class ExternalActivity : AppCompatActivity() {
     }
 
     private fun sortAndRefreshAppLists() {
-        // Set isFavourite status on allApps based on favouritePackages
-        for (app in allApps) {
+        // Filter apps based on search query
+        val filteredApps = if (appSearchQuery.isEmpty()) {
+            allApps
+        } else {
+            allApps.filter { it.label.contains(appSearchQuery, ignoreCase = true) }
+        }
+
+        // Set isFavourite status on filteredApps based on favouritePackages
+        for (app in filteredApps) {
             app.isFavourite = favouritePackages.contains(app.packageName)
         }
 
@@ -206,7 +226,7 @@ class ExternalActivity : AppCompatActivity() {
         // 2. Favourites next (sorted alphabetically by label)
         // 3. Recents next (sorted by position in recentPackages list)
         // 4. The rest alphabetically by label
-        val sortedApps = allApps.sortedWith(compareBy<AppInfo> { it.isLocked }
+        val sortedApps = filteredApps.sortedWith(compareBy<AppInfo> { it.isLocked }
             .thenByDescending { it.isFavourite }
             .thenBy { app ->
                 val index = recentPackages.indexOf(app.packageName)
