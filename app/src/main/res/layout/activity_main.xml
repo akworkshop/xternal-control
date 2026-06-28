@@ -488,9 +488,49 @@
                     android:clickable="true"
                     android:focusable="true"/>
 
+                <!-- Theater Mode Button -->
+                <TextView
+                    android:id="@+id/btnTheaterMode"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_rounded_search"
+                    android:gravity="center"
+                    android:text="💡"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:clickable="true"
+                    android:focusable="true"/>
 
             </LinearLayout>
+
         </LinearLayout>
+
+        <!-- Fullscreen Theater Mode Overlay -->
+        <FrameLayout
+            android:id="@+id/layoutTheaterModeOverlay"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="#FF000000"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="THEATER MODE ACTIVE\n\nDouble-tap anywhere to return to Trackpad"
+                android:textColor="#22ffffff"
+                android:textSize="11sp"
+                android:gravity="center"
+                android:lineSpacingExtra="4dp"/>
+        </FrameLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Right Side / Bottom: Virtual Glasses Display Simulator -->

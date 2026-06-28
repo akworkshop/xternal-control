@@ -112,6 +112,7 @@ class MainActivity : AppCompatActivity() {
     private var simExtNavBar: View? = null
     private var simMapZoomLevel = 1.0f
     private var appSearchQuery: String = ""
+    private var originalBrightness: Float = -1f
 
     // System Overlay Cursor for Real Secondary Display
     private var overlayCursorView: ImageView? = null
@@ -235,6 +236,22 @@ class MainActivity : AppCompatActivity() {
 
         btnRightClick.setOnClickListener {
             performRightClick()
+        }
+
+        val btnTheaterMode = findViewById<View>(R.id.btnTheaterMode)
+        val layoutTheaterModeOverlay = findViewById<View>(R.id.layoutTheaterModeOverlay)
+
+        btnTheaterMode.setOnClickListener {
+            enterTheaterMode()
+        }
+
+        var lastTheaterClickTime: Long = 0
+        layoutTheaterModeOverlay.setOnClickListener {
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastTheaterClickTime < 300) {
+                exitTheaterMode()
+            }
+            lastTheaterClickTime = currentTime
         }
 
         // Toggle Simulator Button Click
@@ -1178,6 +1195,30 @@ class MainActivity : AppCompatActivity() {
             .setMessage("Launching this app is a Pro feature.\n\nIn-app purchases are coming soon to unlock unlimited apps!")
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    private fun enterTheaterMode() {
+        val overlay = findViewById<View>(R.id.layoutTheaterModeOverlay)
+        overlay.visibility = View.VISIBLE
+
+        val lp = window.attributes
+        originalBrightness = lp.screenBrightness
+
+        lp.screenBrightness = 0.01f
+        window.attributes = lp
+
+        Toast.makeText(this, "Theater Mode Active (Double-tap to exit)", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun exitTheaterMode() {
+        val overlay = findViewById<View>(R.id.layoutTheaterModeOverlay)
+        overlay.visibility = View.GONE
+
+        val lp = window.attributes
+        lp.screenBrightness = originalBrightness
+        window.attributes = lp
+
+        Toast.makeText(this, "Screen Restored", Toast.LENGTH_SHORT).show()
     }
 
     private fun dpToPx(dp: Int): Int {
