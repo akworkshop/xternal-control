@@ -1087,10 +1087,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Re-sort the app list:
-        // 1. Favourites first (sorted alphabetically by label)
-        // 2. Recents next (sorted by position in recentPackages list)
-        // 3. The rest alphabetically by label
-        val sortedApps = allApps.sortedWith(compareByDescending<AppInfo> { it.isFavourite }
+        // Re-sort the app list:
+        // 1. Unlocked trial apps first (Play Store flavor only)
+        // 2. Favourites next (sorted alphabetically by label)
+        // 3. Recents next (sorted by position in recentPackages list)
+        // 4. The rest alphabetically by label
+        val sortedApps = allApps.sortedWith(compareBy<AppInfo> { it.isLocked }
+            .thenByDescending { it.isFavourite }
             .thenBy { app ->
                 val index = recentPackages.indexOf(app.packageName)
                 if (index != -1) index else Int.MAX_VALUE
