@@ -173,9 +173,14 @@ class MainActivity : AppCompatActivity() {
         simulationContainer = findViewById(R.id.simulationContainer)
 
         btnDonate = findViewById(R.id.btnDonate)
-        btnDonate.setOnClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/akworkshop"))
-            startActivity(intent)
+        val cardDonation = findViewById<View>(R.id.cardDonation)
+        if (BuildConfig.FLAVOR == "playstore") {
+            cardDonation.visibility = View.GONE
+        } else {
+            btnDonate.setOnClickListener {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/akworkshop"))
+                startActivity(intent)
+            }
         }
 
         tabLayout = findViewById(R.id.controllerTabLayout)
@@ -974,6 +979,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkAndShowDonationPrompt() {
+        if (BuildConfig.FLAVOR == "playstore") return
         val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
         val dontShow = prefs.getBoolean("dont_show_donation", false)
         if (dontShow) return
@@ -1091,6 +1097,14 @@ class MainActivity : AppCompatActivity() {
             favouritePackages.remove(app.packageName)
             Toast.makeText(this, "${app.label} removed from Favourites", Toast.LENGTH_SHORT).show()
         } else {
+            if (BuildConfig.FLAVOR == "playstore" && favouritePackages.size >= 3) {
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                    .setTitle("Pro Feature")
+                    .setMessage("Adding more than 3 favorite apps is a Pro feature.\n\nIn-app purchases are coming soon to unlock unlimited favorites!")
+                    .setPositiveButton("OK", null)
+                    .show()
+                return
+            }
             favouritePackages.add(app.packageName)
             Toast.makeText(this, "${app.label} added to Favourites", Toast.LENGTH_SHORT).show()
         }

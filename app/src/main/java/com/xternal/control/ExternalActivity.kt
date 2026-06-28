@@ -233,6 +233,14 @@ class ExternalActivity : AppCompatActivity() {
             favouritePackages.remove(app.packageName)
             Toast.makeText(this, "${app.label} removed from Favourites", Toast.LENGTH_SHORT).show()
         } else {
+            if (BuildConfig.FLAVOR == "playstore" && favouritePackages.size >= 3) {
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                    .setTitle("Pro Feature")
+                    .setMessage("Adding more than 3 favorite apps is a Pro feature.\n\nIn-app purchases are coming soon to unlock unlimited favorites!")
+                    .setPositiveButton("OK", null)
+                    .show()
+                return
+            }
             favouritePackages.add(app.packageName)
             Toast.makeText(this, "${app.label} added to Favourites", Toast.LENGTH_SHORT).show()
         }
