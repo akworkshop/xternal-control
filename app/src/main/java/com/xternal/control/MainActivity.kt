@@ -101,6 +101,7 @@ class MainActivity : AppCompatActivity() {
     private var twoFingerMode = 0
     private val zoomHandler = Handler(Looper.getMainLooper())
     private var zoomRunnable: Runnable? = null
+    private var lastZoomTime = 0L
 
     // Simulated Glasses UI Views (when simulation mode is ON)
     private var simCursorX = 500f
@@ -265,22 +266,19 @@ class MainActivity : AppCompatActivity() {
                     val totalDx = x - sliderLastTriggerX
                     val threshold = dpToPx(16).toFloat()
 
-                    if (totalDx > threshold) {
-                        InteractionBridge.sendZoom(true)
-                        if (isSimulating) handleSimulatedZoom(true)
-                        val service = ControllerAccessibilityService.instance
-                        if (externalDisplayId != -1 && service != null) {
-                            service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, true)
+                    if (Math.abs(totalDx) > threshold) {
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastZoomTime > 300) {
+                            val isZoomIn = totalDx > 0
+                            InteractionBridge.sendZoom(isZoomIn)
+                            if (isSimulating) handleSimulatedZoom(isZoomIn)
+                            val service = ControllerAccessibilityService.instance
+                            if (externalDisplayId != -1 && service != null) {
+                                service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, isZoomIn)
+                            }
+                            lastZoomTime = currentTime
+                            sliderLastTriggerX = x
                         }
-                        sliderLastTriggerX += threshold
-                    } else if (totalDx < -threshold) {
-                        InteractionBridge.sendZoom(false)
-                        if (isSimulating) handleSimulatedZoom(false)
-                        val service = ControllerAccessibilityService.instance
-                        if (externalDisplayId != -1 && service != null) {
-                            service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, false)
-                        }
-                        sliderLastTriggerX -= threshold
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
