@@ -336,53 +336,88 @@
             app:layout_constraintEnd_toEndOf="parent">
 
             <!-- Trackpad Frame (Fills space) -->
-            <androidx.cardview.widget.CardView
-                android:id="@+id/cvTrackpad"
+            <!-- Trackpad Area (Side-by-side Trackpad & Scroll Zone) -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:layout_marginBottom="8dp"
-                app:cardCornerRadius="24dp"
-                app:cardBackgroundColor="@color/bg_trackpad">
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
 
-                <FrameLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent">
+                <!-- Main Trackpad Card -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/cvTrackpad"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="4"
+                    app:cardCornerRadius="24dp"
+                    app:cardBackgroundColor="@color/bg_trackpad">
 
-                    <View
+                    <FrameLayout
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:background="@drawable/bg_trackpad_grid" />
+                        android:layout_height="match_parent">
 
-                    <View
-                        android:layout_width="120dp"
-                        android:layout_height="120dp"
-                        android:layout_gravity="center"
-                        android:alpha="0.03"
-                        android:background="@drawable/bg_cursor" />
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/bg_trackpad_grid" />
 
-                    <View
-                        android:id="@+id/viewCursorMirror"
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
-                        android:background="@drawable/bg_cursor"
-                        android:alpha="0.2"
-                        android:visibility="gone" />
+                        <View
+                            android:layout_width="120dp"
+                            android:layout_height="120dp"
+                            android:layout_gravity="center"
+                            android:alpha="0.03"
+                            android:background="@drawable/bg_cursor" />
+
+                        <View
+                            android:id="@+id/viewCursorMirror"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:background="@drawable/bg_cursor"
+                            android:alpha="0.2"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/tvTrackpadInstruction"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:text="TRACKPAD MODE INACTIVE\nConnect glasses or enable simulation"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:gravity="center"
+                            android:lineSpacingExtra="4dp" />
+                    </FrameLayout>
+                </androidx.cardview.widget.CardView>
+
+                <!-- Dedicated Vertical Scroll Zone Card (Vertically HUGE!) -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/btnScrollZone"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1.2"
+                    android:layout_marginStart="8dp"
+                    app:cardCornerRadius="24dp"
+                    app:cardBackgroundColor="@color/bg_panel"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?android:attr/selectableItemBackground">
 
                     <TextView
-                        android:id="@+id/tvTrackpadInstruction"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center"
-                        android:text="TRACKPAD MODE INACTIVE\nConnect glasses or enable simulation"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
                         android:gravity="center"
-                        android:lineSpacingExtra="4dp" />
-                </FrameLayout>
-            </androidx.cardview.widget.CardView>
+                        android:text="SCROLL\nZONE\n⇅"
+                        android:textColor="@color/neon_cyan"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:lineSpacingExtra="6dp"
+                        android:letterSpacing="0.05"/>
+                </androidx.cardview.widget.CardView>
 
-            <!-- Bottom Gestures & Navigation Bar -->
+            </LinearLayout>
+
+            <!-- Bottom Zoom Controls -->
             <LinearLayout
                 android:id="@+id/layoutBottomControls"
                 android:layout_width="match_parent"
@@ -409,31 +444,8 @@
                         android:gravity="center"
                         android:text="🔍 -"
                         android:textColor="@color/text_secondary"
-                        android:textSize="14sp"
+                        android:textSize="16sp"
                         android:textStyle="bold"/>
-                </androidx.cardview.widget.CardView>
-
-                <!-- Expanded Scroll & Swipe Zone -->
-                <androidx.cardview.widget.CardView
-                    android:id="@+id/btnScrollZone"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="2.5"
-                    app:cardCornerRadius="14dp"
-                    app:cardBackgroundColor="@color/bg_panel"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?android:attr/selectableItemBackground">
-                    
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:text="SCROLL ZONE ⇅"
-                        android:textColor="@color/neon_cyan"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.05"/>
                 </androidx.cardview.widget.CardView>
 
                 <!-- Zoom In Button -->
@@ -455,7 +467,7 @@
                         android:gravity="center"
                         android:text="🔍 +"
                         android:textColor="@color/text_secondary"
-                        android:textSize="14sp"
+                        android:textSize="16sp"
                         android:textStyle="bold"/>
                 </androidx.cardview.widget.CardView>
 

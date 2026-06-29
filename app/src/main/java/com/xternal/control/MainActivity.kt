@@ -8,6 +8,8 @@ import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
+import android.os.Handler
+import android.os.Looper
 import android.graphics.PixelFormat
 import android.provider.Settings
 import android.text.Editable
@@ -97,6 +99,8 @@ class MainActivity : AppCompatActivity() {
     private var lastPinchDistance = 0f
     private var hasDraggedOrScrolled = false
     private var twoFingerMode = 0
+    private val zoomHandler = Handler(Looper.getMainLooper())
+    private var zoomRunnable: Runnable? = null
 
     // Simulated Glasses UI Views (when simulation mode is ON)
     private var simCursorX = 500f
@@ -236,22 +240,28 @@ class MainActivity : AppCompatActivity() {
 
 
 
-        btnZoomIn.setOnClickListener {
-            InteractionBridge.sendZoom(true)
-            if (isSimulating) handleSimulatedZoom(true)
-            val service = ControllerAccessibilityService.instance
-            if (externalDisplayId != -1 && service != null) {
-                service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, true)
+        btnZoomIn.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    startContinuousZoom(true)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    stopContinuousZoom()
+                }
             }
+            true
         }
 
-        btnZoomOut.setOnClickListener {
-            InteractionBridge.sendZoom(false)
-            if (isSimulating) handleSimulatedZoom(false)
-            val service = ControllerAccessibilityService.instance
-            if (externalDisplayId != -1 && service != null) {
-                service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, false)
+        btnZoomOut.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    startContinuousZoom(false)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    stopContinuousZoom()
+                }
             }
+            true
         }
 
         var scrollLastX = 0f
@@ -735,7 +745,6 @@ class MainActivity : AppCompatActivity() {
                     downTime = System.currentTimeMillis()
                     isMultiTouch = false
                     hasDraggedOrScrolled = false
-                    twoFingerMode = 0
                     viewCursorMirror.visibility = View.VISIBLE
                     viewCursorMirror.x = x
                     viewCursorMirror.y = y
@@ -743,16 +752,10 @@ class MainActivity : AppCompatActivity() {
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     isMultiTouch = true
                     hasDraggedOrScrolled = true
-                    twoFingerMode = 0
-                    if (event.pointerCount == 2) {
-                        lastScrollDistance = Math.abs(event.getY(0) - event.getY(1))
+                    if (event.pointerCount >= 2) {
                         accumulatedScrollDx = 0f
                         accumulatedScrollDy = 0f
                         lastScrollGestureTime = System.currentTimeMillis()
-                        
-                        initialPinchDistance = getPointerDistance(event)
-                        lastPinchDistance = initialPinchDistance
-                        isPinchGesture = false
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -760,67 +763,34 @@ class MainActivity : AppCompatActivity() {
                     if (totalMoved > 10) {
                         hasDraggedOrScrolled = true
                     }
-                    if (isMultiTouch && event.pointerCount == 2) {
-                        val currentDist = getPointerDistance(event)
-                        val distDelta = Math.abs(currentDist - initialPinchDistance)
-                        val moveDelta = Math.hypot((x - startX).toDouble(), (y - startY).toDouble()).toFloat()
+                    if (isMultiTouch && event.pointerCount >= 2) {
+                        // Two-finger scroll drag
+                        val scrollDx = (x - lastX) * 2.5f
+                        val scrollDy = (y - lastY) * 2.5f
+                        InteractionBridge.sendScroll(scrollDy)
+                        if (isSimulating) handleSimulatedScroll(scrollDy)
 
-                        if (twoFingerMode == 0) {
-                            if (distDelta > dpToPx(6)) {
-                                twoFingerMode = 1 // Locked to pinch/zoom
-                                isPinchGesture = true
-                                lastPinchDistance = currentDist
-                                accumulatedScrollDx = 0f
-                                accumulatedScrollDy = 0f
-                            } else if (moveDelta > dpToPx(10)) {
-                                twoFingerMode = 2 // Locked to scroll
-                                isPinchGesture = false
-                            }
-                        }
+                        accumulatedScrollDx += scrollDx
+                        accumulatedScrollDy += scrollDy
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastScrollGestureTime > 80) {
+                            val service = ControllerAccessibilityService.instance
+                            if (externalDisplayId != -1 && service != null) {
+                                val absDx = Math.abs(accumulatedScrollDx)
+                                val absDy = Math.abs(accumulatedScrollDy)
 
-                        if (twoFingerMode == 1) {
-                            // Pinch/Zoom Mode
-                            val pinchDelta = currentDist - lastPinchDistance
-                            if (Math.abs(pinchDelta) > dpToPx(3)) {
-                                val isZoomIn = pinchDelta > 0
-                                InteractionBridge.sendZoom(isZoomIn)
-                                if (isSimulating) handleSimulatedZoom(isZoomIn)
-
-                                val service = ControllerAccessibilityService.instance
-                                if (externalDisplayId != -1 && service != null) {
-                                    service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, isZoomIn)
-                                }
-                                lastPinchDistance = currentDist
-                            }
-                        } else if (twoFingerMode == 2) {
-                            // Scroll Mode
-                            val scrollDx = (x - lastX) * 2.5f
-                            val scrollDy = (y - lastY) * 2.5f
-                            InteractionBridge.sendScroll(scrollDy)
-                            if (isSimulating) handleSimulatedScroll(scrollDy)
-
-                            accumulatedScrollDx += scrollDx
-                            accumulatedScrollDy += scrollDy
-                            val currentTime = System.currentTimeMillis()
-                            if (currentTime - lastScrollGestureTime > 80) {
-                                val service = ControllerAccessibilityService.instance
-                                if (externalDisplayId != -1 && service != null) {
-                                    val absDx = Math.abs(accumulatedScrollDx)
-                                    val absDy = Math.abs(accumulatedScrollDy)
-
-                                    if (absDx > absDy && absDx > dpToPx(4)) {
-                                        val endX = (overlayCursorX + accumulatedScrollDx * 1.5f).coerceIn(0f, externalDisplayWidth.toFloat())
-                                        service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, endX, overlayCursorY)
-                                        accumulatedScrollDx = 0f
-                                        accumulatedScrollDy = 0f
-                                        lastScrollGestureTime = currentTime
-                                    } else if (absDy > absDx && absDy > dpToPx(4)) {
-                                        val endY = (overlayCursorY + accumulatedScrollDy * 1.5f).coerceIn(0f, externalDisplayHeight.toFloat())
-                                        service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
-                                        accumulatedScrollDx = 0f
-                                        accumulatedScrollDy = 0f
-                                        lastScrollGestureTime = currentTime
-                                    }
+                                if (absDx > absDy && absDx > dpToPx(4)) {
+                                    val endX = (overlayCursorX + accumulatedScrollDx * 1.5f).coerceIn(0f, externalDisplayWidth.toFloat())
+                                    service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, endX, overlayCursorY)
+                                    accumulatedScrollDx = 0f
+                                    accumulatedScrollDy = 0f
+                                    lastScrollGestureTime = currentTime
+                                } else if (absDy > absDx && absDy > dpToPx(4)) {
+                                    val endY = (overlayCursorY + accumulatedScrollDy * 1.5f).coerceIn(0f, externalDisplayHeight.toFloat())
+                                    service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
+                                    accumulatedScrollDx = 0f
+                                    accumulatedScrollDy = 0f
+                                    lastScrollGestureTime = currentTime
                                 }
                             }
                         }
@@ -845,34 +815,30 @@ class MainActivity : AppCompatActivity() {
                     if (!hasDraggedOrScrolled && duration < 250) {
                         performLeftClick()
                     } else if (isMultiTouch) {
-                        if (twoFingerMode == 2) {
-                            val service = ControllerAccessibilityService.instance
-                            if (externalDisplayId != -1 && service != null) {
-                                val absDx = Math.abs(accumulatedScrollDx)
-                                val absDy = Math.abs(accumulatedScrollDy)
-                                if (absDx > absDy && absDx > dpToPx(5)) {
-                                    val endX = (overlayCursorX + accumulatedScrollDx * 1.5f).coerceIn(0f, externalDisplayWidth.toFloat())
-                                    service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, endX, overlayCursorY)
-                                } else if (absDy > absDx && absDy > dpToPx(5)) {
-                                    val endY = (overlayCursorY + accumulatedScrollDy * 1.5f).coerceIn(0f, externalDisplayHeight.toFloat())
-                                    service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
-                                }
+                        val service = ControllerAccessibilityService.instance
+                        if (externalDisplayId != -1 && service != null) {
+                            val absDx = Math.abs(accumulatedScrollDx)
+                            val absDy = Math.abs(accumulatedScrollDy)
+                            if (absDx > absDy && absDx > dpToPx(5)) {
+                                val endX = (overlayCursorX + accumulatedScrollDx * 1.5f).coerceIn(0f, externalDisplayWidth.toFloat())
+                                service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, endX, overlayCursorY)
+                            } else if (absDy > absDx && absDy > dpToPx(5)) {
+                                val endY = (overlayCursorY + accumulatedScrollDy * 1.5f).coerceIn(0f, externalDisplayHeight.toFloat())
+                                service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
                             }
                         }
                         accumulatedScrollDx = 0f
                         accumulatedScrollDy = 0f
                     }
                     isMultiTouch = false
-                    isPinchGesture = false
-                    twoFingerMode = 0
                 }
                 MotionEvent.ACTION_POINTER_UP -> {
                     val duration = System.currentTimeMillis() - downTime
                     val absDx = Math.abs(accumulatedScrollDx)
                     val absDy = Math.abs(accumulatedScrollDy)
-                    if (isMultiTouch && twoFingerMode != 1 && duration < 300 && absDx < dpToPx(8) && absDy < dpToPx(8)) {
+                    if (isMultiTouch && duration < 300 && absDx < dpToPx(8) && absDy < dpToPx(8)) {
                         performRightClick()
-                    } else if (isMultiTouch && twoFingerMode == 2) {
+                    } else if (isMultiTouch) {
                         val service = ControllerAccessibilityService.instance
                         if (externalDisplayId != -1 && service != null) {
                             if (absDx > absDy && absDx > dpToPx(5)) {
@@ -1317,6 +1283,30 @@ class MainActivity : AppCompatActivity() {
             .setMessage("Launching this app is a Pro feature.\n\nIn-app purchases are coming soon to unlock unlimited apps!")
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    private fun startContinuousZoom(isZoomIn: Boolean) {
+        stopContinuousZoom()
+        val runnable = object : Runnable {
+            override fun run() {
+                InteractionBridge.sendZoom(isZoomIn)
+                if (isSimulating) handleSimulatedZoom(isZoomIn)
+                val service = ControllerAccessibilityService.instance
+                if (externalDisplayId != -1 && service != null) {
+                    service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, isZoomIn)
+                }
+                zoomHandler.postDelayed(this, 250)
+            }
+        }
+        zoomRunnable = runnable
+        zoomHandler.post(runnable)
+    }
+
+    private fun stopContinuousZoom() {
+        zoomRunnable?.let {
+            zoomHandler.removeCallbacks(it)
+        }
+        zoomRunnable = null
     }
 
     private fun enterTheaterMode() {
