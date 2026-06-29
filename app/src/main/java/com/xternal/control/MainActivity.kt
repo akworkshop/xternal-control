@@ -51,7 +51,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnGrantOverlay: Button
     private lateinit var tvPermAccessibility: TextView
     private lateinit var btnGrantAccessibility: Button
-    private lateinit var btnLeftClick: View
     private lateinit var btnScrollZone: View
     private lateinit var rvAppsHorizontal: RecyclerView
     private lateinit var cvTrackpad: CardView
@@ -95,6 +94,7 @@ class MainActivity : AppCompatActivity() {
     private var isPinchGesture = false
     private var lastPinchDistance = 0f
     private var hasDraggedOrScrolled = false
+    private var twoFingerMode = 0
 
     // Simulated Glasses UI Views (when simulation mode is ON)
     private var simCursorX = 500f
@@ -169,7 +169,6 @@ class MainActivity : AppCompatActivity() {
         btnGrantAccessibility = findViewById(R.id.btnGrantAccessibility)
         rvAppsHorizontal = findViewById(R.id.rvAppsHorizontal)
         cvTrackpad = findViewById(R.id.cvTrackpad)
-        btnLeftClick = findViewById(R.id.btnLeftClick)
         btnScrollZone = findViewById(R.id.btnScrollZone)
         tvTrackpadInstruction = findViewById(R.id.tvTrackpadInstruction)
         viewCursorMirror = findViewById(R.id.viewCursorMirror)
@@ -231,9 +230,7 @@ class MainActivity : AppCompatActivity() {
             override fun onTabReselected(tab: TabLayout.Tab) {}
         })
 
-        btnLeftClick.setOnClickListener {
-            performLeftClick()
-        }
+
 
         var scrollLastX = 0f
         var scrollLastY = 0f
@@ -610,9 +607,8 @@ class MainActivity : AppCompatActivity() {
                     PixelFormat.TRANSLUCENT
                 ).apply {
                     gravity = Gravity.TOP or Gravity.START
-                    val offset = dpToPx(12)
-                    x = (overlayCursorX - offset).toInt()
-                    y = (overlayCursorY - offset).toInt()
+                    x = overlayCursorX.toInt()
+                    y = overlayCursorY.toInt()
                 }
 
                 overlayWindowManager?.addView(overlayCursorView, overlayParams)
@@ -646,9 +642,8 @@ class MainActivity : AppCompatActivity() {
         overlayCursorY = (overlayCursorY + dy * scaleFactor).coerceIn(0f, externalDisplayHeight.toFloat())
 
         overlayParams?.let { params ->
-            val offset = dpToPx(12).toFloat()
-            params.x = (overlayCursorX - offset).toInt()
-            params.y = (overlayCursorY - offset).toInt()
+            params.x = overlayCursorX.toInt()
+            params.y = overlayCursorY.toInt()
             try {
                 overlayWindowManager?.updateViewLayout(overlayCursorView, params)
             } catch (e: Exception) {
@@ -718,13 +713,15 @@ class MainActivity : AppCompatActivity() {
                     downTime = System.currentTimeMillis()
                     isMultiTouch = false
                     hasDraggedOrScrolled = false
+                    twoFingerMode = 0
                     viewCursorMirror.visibility = View.VISIBLE
-                    viewCursorMirror.x = x - (viewCursorMirror.width / 2)
-                    viewCursorMirror.y = y - (viewCursorMirror.height / 2)
+                    viewCursorMirror.x = x
+                    viewCursorMirror.y = y
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     isMultiTouch = true
                     hasDraggedOrScrolled = true
+                    twoFingerMode = 0
                     if (event.pointerCount == 2) {
                         lastScrollDistance = Math.abs(event.getY(0) - event.getY(1))
                         accumulatedScrollDx = 0f
@@ -743,18 +740,26 @@ class MainActivity : AppCompatActivity() {
                     }
                     if (isMultiTouch && event.pointerCount == 2) {
                         val currentDist = getPointerDistance(event)
-                        val distDeltaFromInitial = Math.abs(currentDist - initialPinchDistance)
+                        val distDelta = Math.abs(currentDist - initialPinchDistance)
+                        val moveDelta = Math.hypot((x - startX).toDouble(), (y - startY).toDouble()).toFloat()
 
-                        if (!isPinchGesture && distDeltaFromInitial > dpToPx(20)) {
-                            isPinchGesture = true
-                            lastPinchDistance = currentDist
-                            accumulatedScrollDx = 0f
-                            accumulatedScrollDy = 0f
+                        if (twoFingerMode == 0) {
+                            if (distDelta > dpToPx(6)) {
+                                twoFingerMode = 1 // Locked to pinch/zoom
+                                isPinchGesture = true
+                                lastPinchDistance = currentDist
+                                accumulatedScrollDx = 0f
+                                accumulatedScrollDy = 0f
+                            } else if (moveDelta > dpToPx(10)) {
+                                twoFingerMode = 2 // Locked to scroll
+                                isPinchGesture = false
+                            }
                         }
 
-                        if (isPinchGesture) {
+                        if (twoFingerMode == 1) {
+                            // Pinch/Zoom Mode
                             val pinchDelta = currentDist - lastPinchDistance
-                            if (Math.abs(pinchDelta) > dpToPx(15)) {
+                            if (Math.abs(pinchDelta) > dpToPx(8)) {
                                 val isZoomIn = pinchDelta > 0
                                 InteractionBridge.sendZoom(isZoomIn)
                                 if (isSimulating) handleSimulatedZoom(isZoomIn)
@@ -765,14 +770,13 @@ class MainActivity : AppCompatActivity() {
                                 }
                                 lastPinchDistance = currentDist
                             }
-                        } else {
-                            // Two-finger scroll drag
+                        } else if (twoFingerMode == 2) {
+                            // Scroll Mode
                             val scrollDx = (x - lastX) * 2.5f
                             val scrollDy = (y - lastY) * 2.5f
                             InteractionBridge.sendScroll(scrollDy)
                             if (isSimulating) handleSimulatedScroll(scrollDy)
 
-                            // Accumulate scroll/swipe coordinates for accessibility injection
                             accumulatedScrollDx += scrollDx
                             accumulatedScrollDy += scrollDy
                             val currentTime = System.currentTimeMillis()
@@ -783,14 +787,12 @@ class MainActivity : AppCompatActivity() {
                                     val absDy = Math.abs(accumulatedScrollDy)
 
                                     if (absDx > absDy && absDx > dpToPx(4)) {
-                                        // Swipe horizontally
                                         val endX = (overlayCursorX + accumulatedScrollDx * 1.5f).coerceIn(0f, externalDisplayWidth.toFloat())
                                         service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, endX, overlayCursorY)
                                         accumulatedScrollDx = 0f
                                         accumulatedScrollDy = 0f
                                         lastScrollGestureTime = currentTime
                                     } else if (absDy > absDx && absDy > dpToPx(4)) {
-                                        // Scroll vertically
                                         val endY = (overlayCursorY + accumulatedScrollDy * 1.5f).coerceIn(0f, externalDisplayHeight.toFloat())
                                         service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
                                         accumulatedScrollDx = 0f
@@ -808,8 +810,8 @@ class MainActivity : AppCompatActivity() {
                         if (isSimulating) moveSimulatedCursor(dx, dy)
                         updateOverlayCursor(dx, dy)
                         
-                        viewCursorMirror.x = x - (viewCursorMirror.width / 2)
-                        viewCursorMirror.y = y - (viewCursorMirror.height / 2)
+                        viewCursorMirror.x = x
+                        viewCursorMirror.y = y
                     }
                     lastX = x
                     lastY = y
@@ -821,8 +823,7 @@ class MainActivity : AppCompatActivity() {
                     if (!hasDraggedOrScrolled && duration < 250) {
                         performLeftClick()
                     } else if (isMultiTouch) {
-                        if (!isPinchGesture) {
-                            // Dispatch any final scroll/swipe gesture remaining
+                        if (twoFingerMode == 2) {
                             val service = ControllerAccessibilityService.instance
                             if (externalDisplayId != -1 && service != null) {
                                 val absDx = Math.abs(accumulatedScrollDx)
@@ -841,16 +842,15 @@ class MainActivity : AppCompatActivity() {
                     }
                     isMultiTouch = false
                     isPinchGesture = false
+                    twoFingerMode = 0
                 }
                 MotionEvent.ACTION_POINTER_UP -> {
-                    // Detect two-finger tap (right click) when one of the fingers lifts
                     val duration = System.currentTimeMillis() - downTime
                     val absDx = Math.abs(accumulatedScrollDx)
                     val absDy = Math.abs(accumulatedScrollDy)
-                    if (isMultiTouch && !isPinchGesture && duration < 300 && absDx < dpToPx(8) && absDy < dpToPx(8)) {
+                    if (isMultiTouch && twoFingerMode != 1 && duration < 300 && absDx < dpToPx(8) && absDy < dpToPx(8)) {
                         performRightClick()
-                    } else if (isMultiTouch && !isPinchGesture) {
-                        // Dispatch scroll gesture on finger lift
+                    } else if (isMultiTouch && twoFingerMode == 2) {
                         val service = ControllerAccessibilityService.instance
                         if (externalDisplayId != -1 && service != null) {
                             if (absDx > absDy && absDx > dpToPx(5)) {
