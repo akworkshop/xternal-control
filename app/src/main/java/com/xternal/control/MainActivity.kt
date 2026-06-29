@@ -52,6 +52,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvPermAccessibility: TextView
     private lateinit var btnGrantAccessibility: Button
     private lateinit var btnScrollZone: View
+    private lateinit var btnZoomIn: View
+    private lateinit var btnZoomOut: View
     private lateinit var rvAppsHorizontal: RecyclerView
     private lateinit var cvTrackpad: CardView
     private lateinit var tabLayout: TabLayout
@@ -170,6 +172,8 @@ class MainActivity : AppCompatActivity() {
         rvAppsHorizontal = findViewById(R.id.rvAppsHorizontal)
         cvTrackpad = findViewById(R.id.cvTrackpad)
         btnScrollZone = findViewById(R.id.btnScrollZone)
+        btnZoomIn = findViewById(R.id.btnZoomIn)
+        btnZoomOut = findViewById(R.id.btnZoomOut)
         tvTrackpadInstruction = findViewById(R.id.tvTrackpadInstruction)
         viewCursorMirror = findViewById(R.id.viewCursorMirror)
         simulationContainer = findViewById(R.id.simulationContainer)
@@ -231,6 +235,24 @@ class MainActivity : AppCompatActivity() {
         })
 
 
+
+        btnZoomIn.setOnClickListener {
+            InteractionBridge.sendZoom(true)
+            if (isSimulating) handleSimulatedZoom(true)
+            val service = ControllerAccessibilityService.instance
+            if (externalDisplayId != -1 && service != null) {
+                service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, true)
+            }
+        }
+
+        btnZoomOut.setOnClickListener {
+            InteractionBridge.sendZoom(false)
+            if (isSimulating) handleSimulatedZoom(false)
+            val service = ControllerAccessibilityService.instance
+            if (externalDisplayId != -1 && service != null) {
+                service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, false)
+            }
+        }
 
         var scrollLastX = 0f
         var scrollLastY = 0f
@@ -759,7 +781,7 @@ class MainActivity : AppCompatActivity() {
                         if (twoFingerMode == 1) {
                             // Pinch/Zoom Mode
                             val pinchDelta = currentDist - lastPinchDistance
-                            if (Math.abs(pinchDelta) > dpToPx(8)) {
+                            if (Math.abs(pinchDelta) > dpToPx(3)) {
                                 val isZoomIn = pinchDelta > 0
                                 InteractionBridge.sendZoom(isZoomIn)
                                 if (isSimulating) handleSimulatedZoom(isZoomIn)
@@ -867,6 +889,13 @@ class MainActivity : AppCompatActivity() {
                                 lastScrollGestureTime = System.currentTimeMillis()
                             }
                         }
+                    }
+
+                    val actionIndex = event.actionIndex
+                    val remainingIndex = if (actionIndex == 0) 1 else 0
+                    if (event.pointerCount > remainingIndex) {
+                        lastX = event.getX(remainingIndex)
+                        lastY = event.getY(remainingIndex)
                     }
                 }
             }
