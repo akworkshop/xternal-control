@@ -110,8 +110,8 @@ class ControllerAccessibilityService : AccessibilityService() {
             stroke2 = GestureDescription.StrokeDescription(path2, 0, 250)
         } else {
             // Pinch-close: Fingers move inwards towards center (slow and larger range for Gallery, slow to prevent Maps momentum zoom out)
-            val startRadius = 220f
-            val endRadius = 20f
+            val startRadius = 130f
+            val endRadius = 30f
             path1.moveTo(centerX - startRadius, centerY)
             path1.lineTo(centerX - endRadius, centerY)
 
