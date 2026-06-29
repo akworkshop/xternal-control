@@ -94,7 +94,7 @@ class ControllerAccessibilityService : AccessibilityService() {
         val path2 = Path()
 
         val startRadius = 15f
-        val endRadius = 120f
+        val endRadius = 70f
 
         if (isZoomIn) {
             // Pinch-open: Fingers move outwards from center
