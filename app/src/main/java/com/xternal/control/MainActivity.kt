@@ -52,7 +52,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvPermAccessibility: TextView
     private lateinit var btnGrantAccessibility: Button
     private lateinit var btnLeftClick: View
-    private lateinit var btnRightClick: View
+    private lateinit var btnScrollZone: View
     private lateinit var rvAppsHorizontal: RecyclerView
     private lateinit var cvTrackpad: CardView
     private lateinit var tabLayout: TabLayout
@@ -94,6 +94,7 @@ class MainActivity : AppCompatActivity() {
     private var initialPinchDistance = 0f
     private var isPinchGesture = false
     private var lastPinchDistance = 0f
+    private var hasDraggedOrScrolled = false
 
     // Simulated Glasses UI Views (when simulation mode is ON)
     private var simCursorX = 500f
@@ -169,7 +170,7 @@ class MainActivity : AppCompatActivity() {
         rvAppsHorizontal = findViewById(R.id.rvAppsHorizontal)
         cvTrackpad = findViewById(R.id.cvTrackpad)
         btnLeftClick = findViewById(R.id.btnLeftClick)
-        btnRightClick = findViewById(R.id.btnRightClick)
+        btnScrollZone = findViewById(R.id.btnScrollZone)
         tvTrackpadInstruction = findViewById(R.id.tvTrackpadInstruction)
         viewCursorMirror = findViewById(R.id.viewCursorMirror)
         simulationContainer = findViewById(R.id.simulationContainer)
@@ -234,8 +235,72 @@ class MainActivity : AppCompatActivity() {
             performLeftClick()
         }
 
-        btnRightClick.setOnClickListener {
-            performRightClick()
+        var scrollLastX = 0f
+        var scrollLastY = 0f
+        var scrollStartX = 0f
+        var scrollStartY = 0f
+        var scrollDownTime: Long = 0
+        var hasMovedScrollZone = false
+
+        btnScrollZone.setOnTouchListener { _, event ->
+            if (externalDisplayId == -1 && !isSimulating) {
+                return@setOnTouchListener false
+            }
+
+            val x = event.x
+            val y = event.y
+
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    scrollStartX = x
+                    scrollStartY = y
+                    scrollLastX = x
+                    scrollLastY = y
+                    scrollDownTime = System.currentTimeMillis()
+                    hasMovedScrollZone = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = x - scrollLastX
+                    val dy = y - scrollLastY
+
+                    val totalMoved = Math.hypot((x - scrollStartX).toDouble(), (y - scrollStartY).toDouble())
+                    if (totalMoved > dpToPx(5)) {
+                        hasMovedScrollZone = true
+                    }
+
+                    if (hasMovedScrollZone) {
+                        // Scroll vertically based on dy
+                        if (Math.abs(dy) > Math.abs(dx)) {
+                            val scrollDy = dy * 3.5f
+                            InteractionBridge.sendScroll(scrollDy)
+                            if (isSimulating) handleSimulatedScroll(scrollDy)
+
+                            val service = ControllerAccessibilityService.instance
+                            if (externalDisplayId != -1 && service != null) {
+                                val endY = (overlayCursorY + dy * 2.5f).coerceIn(0f, externalDisplayHeight.toFloat())
+                                service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
+                            }
+                        } else {
+                            // Swipe horizontally based on dx
+                            val service = ControllerAccessibilityService.instance
+                            if (externalDisplayId != -1 && service != null && Math.abs(dx) > dpToPx(3)) {
+                                val endX = (overlayCursorX + dx * 2.5f).coerceIn(0f, externalDisplayWidth.toFloat())
+                                service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, endX, overlayCursorY)
+                            }
+                        }
+                    }
+
+                    scrollLastX = x
+                    scrollLastY = y
+                }
+                MotionEvent.ACTION_UP -> {
+                    val duration = System.currentTimeMillis() - scrollDownTime
+                    if (!hasMovedScrollZone && duration < 250) {
+                        performRightClick()
+                    }
+                }
+            }
+            true
         }
 
         val btnTheaterMode = findViewById<View>(R.id.btnTheaterMode)
@@ -652,12 +717,14 @@ class MainActivity : AppCompatActivity() {
                     lastY = y
                     downTime = System.currentTimeMillis()
                     isMultiTouch = false
+                    hasDraggedOrScrolled = false
                     viewCursorMirror.visibility = View.VISIBLE
                     viewCursorMirror.x = x - (viewCursorMirror.width / 2)
                     viewCursorMirror.y = y - (viewCursorMirror.height / 2)
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     isMultiTouch = true
+                    hasDraggedOrScrolled = true
                     if (event.pointerCount == 2) {
                         lastScrollDistance = Math.abs(event.getY(0) - event.getY(1))
                         accumulatedScrollDx = 0f
@@ -670,6 +737,10 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    val totalMoved = Math.hypot((x - startX).toDouble(), (y - startY).toDouble())
+                    if (totalMoved > 10) {
+                        hasDraggedOrScrolled = true
+                    }
                     if (isMultiTouch && event.pointerCount == 2) {
                         val currentDist = getPointerDistance(event)
                         val distDeltaFromInitial = Math.abs(currentDist - initialPinchDistance)
@@ -746,10 +817,8 @@ class MainActivity : AppCompatActivity() {
                 MotionEvent.ACTION_UP -> {
                     viewCursorMirror.visibility = View.GONE
                     val duration = System.currentTimeMillis() - downTime
-                    val totalDx = Math.abs(x - startX)
-                    val totalDy = Math.abs(y - startY)
                     
-                    if (!isMultiTouch && duration < 250 && totalDx < 15 && totalDy < 15) {
+                    if (!hasDraggedOrScrolled && duration < 250) {
                         performLeftClick()
                     } else if (isMultiTouch) {
                         if (!isPinchGesture) {

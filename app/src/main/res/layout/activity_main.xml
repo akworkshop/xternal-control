@@ -414,10 +414,10 @@
                 </androidx.cardview.widget.CardView>
 
                 <androidx.cardview.widget.CardView
-                    android:id="@+id/btnRightClick"
+                    android:id="@+id/btnScrollZone"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_weight="1"
+                    android:layout_weight="1.5"
                     android:layout_marginStart="6dp"
                     app:cardCornerRadius="14dp"
                     app:cardBackgroundColor="@color/bg_panel"
@@ -429,9 +429,9 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:gravity="center"
-                        android:text="RIGHT CLICK"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
+                        android:text="SCROLL ZONE ⇅"
+                        android:textColor="@color/neon_cyan"
+                        android:textSize="11sp"
                         android:textStyle="bold"
                         android:letterSpacing="0.05"/>
                 </androidx.cardview.widget.CardView>

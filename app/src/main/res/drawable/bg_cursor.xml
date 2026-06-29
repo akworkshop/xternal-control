@@ -1,11 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <solid android:color="#FFFFFF" />
-    <stroke
-        android:width="4dp"
-        android:color="#8000F2FE" />
-    <size
-        android:width="24dp"
-        android:height="24dp" />
-</shape>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Outer glow / border of the arrow -->
+    <path
+        android:fillColor="#8000F2FE"
+        android:pathData="M3,2 L3,21 L8.5,15.5 L14,23 L18,20 L12.5,12.5 L20,12 Z" />
+    <!-- Inner white fill of the arrow -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M4.5,4.5 L4.5,17.5 L9,13 L13.5,19 L15.5,17.5 L11,11.5 L16.5,11.5 Z" />
+</vector>
