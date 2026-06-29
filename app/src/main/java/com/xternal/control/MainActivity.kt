@@ -53,7 +53,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnGrantOverlay: Button
     private lateinit var tvPermAccessibility: TextView
     private lateinit var btnGrantAccessibility: Button
-    private lateinit var btnScrollZone: View
     private lateinit var btnZoomIn: View
     private lateinit var btnZoomOut: View
     private lateinit var rvAppsHorizontal: RecyclerView
@@ -175,7 +174,6 @@ class MainActivity : AppCompatActivity() {
         btnGrantAccessibility = findViewById(R.id.btnGrantAccessibility)
         rvAppsHorizontal = findViewById(R.id.rvAppsHorizontal)
         cvTrackpad = findViewById(R.id.cvTrackpad)
-        btnScrollZone = findViewById(R.id.btnScrollZone)
         btnZoomIn = findViewById(R.id.btnZoomIn)
         btnZoomOut = findViewById(R.id.btnZoomOut)
         tvTrackpadInstruction = findViewById(R.id.tvTrackpadInstruction)
@@ -264,73 +262,6 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        var scrollLastX = 0f
-        var scrollLastY = 0f
-        var scrollStartX = 0f
-        var scrollStartY = 0f
-        var scrollDownTime: Long = 0
-        var hasMovedScrollZone = false
-
-        btnScrollZone.setOnTouchListener { _, event ->
-            if (externalDisplayId == -1 && !isSimulating) {
-                return@setOnTouchListener false
-            }
-
-            val x = event.x
-            val y = event.y
-
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    scrollStartX = x
-                    scrollStartY = y
-                    scrollLastX = x
-                    scrollLastY = y
-                    scrollDownTime = System.currentTimeMillis()
-                    hasMovedScrollZone = false
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val dx = x - scrollLastX
-                    val dy = y - scrollLastY
-
-                    val totalMoved = Math.hypot((x - scrollStartX).toDouble(), (y - scrollStartY).toDouble())
-                    if (totalMoved > dpToPx(5)) {
-                        hasMovedScrollZone = true
-                    }
-
-                    if (hasMovedScrollZone) {
-                        // Scroll vertically based on dy
-                        if (Math.abs(dy) > Math.abs(dx)) {
-                            val scrollDy = dy * 3.5f
-                            InteractionBridge.sendScroll(scrollDy)
-                            if (isSimulating) handleSimulatedScroll(scrollDy)
-
-                            val service = ControllerAccessibilityService.instance
-                            if (externalDisplayId != -1 && service != null) {
-                                val endY = (overlayCursorY + dy * 2.5f).coerceIn(0f, externalDisplayHeight.toFloat())
-                                service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
-                            }
-                        } else {
-                            // Swipe horizontally based on dx
-                            val service = ControllerAccessibilityService.instance
-                            if (externalDisplayId != -1 && service != null && Math.abs(dx) > dpToPx(3)) {
-                                val endX = (overlayCursorX + dx * 2.5f).coerceIn(0f, externalDisplayWidth.toFloat())
-                                service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, endX, overlayCursorY)
-                            }
-                        }
-                    }
-
-                    scrollLastX = x
-                    scrollLastY = y
-                }
-                MotionEvent.ACTION_UP -> {
-                    val duration = System.currentTimeMillis() - scrollDownTime
-                    if (!hasMovedScrollZone && duration < 250) {
-                        performRightClick()
-                    }
-                }
-            }
-            true
-        }
 
         val btnTheaterMode = findViewById<View>(R.id.btnTheaterMode)
         val layoutTheaterModeOverlay = findViewById<View>(R.id.layoutTheaterModeOverlay)

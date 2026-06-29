@@ -93,27 +93,34 @@ class ControllerAccessibilityService : AccessibilityService() {
         val path1 = Path()
         val path2 = Path()
 
-        val startRadius = 15f
-        val endRadius = 70f
+        val stroke1: GestureDescription.StrokeDescription
+        val stroke2: GestureDescription.StrokeDescription
 
         if (isZoomIn) {
+            val startRadius = 15f
+            val endRadius = 70f
             // Pinch-open: Fingers move outwards from center
             path1.moveTo(centerX - startRadius, centerY)
             path1.lineTo(centerX - endRadius, centerY)
 
             path2.moveTo(centerX + startRadius, centerY)
             path2.lineTo(centerX + endRadius, centerY)
+
+            stroke1 = GestureDescription.StrokeDescription(path1, 0, 200)
+            stroke2 = GestureDescription.StrokeDescription(path2, 0, 200)
         } else {
-            // Pinch-close: Fingers move inwards towards center
-            path1.moveTo(centerX - endRadius, centerY)
-            path1.lineTo(centerX - startRadius, centerY)
+            // Pinch-close: Fingers move inwards towards center (slow and small to prevent momentum zoom out)
+            val startRadius = 40f
+            val endRadius = 25f
+            path1.moveTo(centerX - startRadius, centerY)
+            path1.lineTo(centerX - endRadius, centerY)
 
-            path2.moveTo(centerX + endRadius, centerY)
-            path2.lineTo(centerX + startRadius, centerY)
+            path2.moveTo(centerX + startRadius, centerY)
+            path2.lineTo(centerX + endRadius, centerY)
+
+            stroke1 = GestureDescription.StrokeDescription(path1, 0, 350)
+            stroke2 = GestureDescription.StrokeDescription(path2, 0, 350)
         }
-
-        val stroke1 = GestureDescription.StrokeDescription(path1, 0, 200)
-        val stroke2 = GestureDescription.StrokeDescription(path2, 0, 200)
 
         val builder = GestureDescription.Builder().apply {
             addStroke(stroke1)
