@@ -53,8 +53,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnGrantOverlay: Button
     private lateinit var tvPermAccessibility: TextView
     private lateinit var btnGrantAccessibility: Button
-    private lateinit var btnZoomIn: View
-    private lateinit var btnZoomOut: View
+    private lateinit var cvZoomSlider: View
+    private lateinit var viewSliderHandle: View
+    private lateinit var tvSliderHint: View
     private lateinit var rvAppsHorizontal: RecyclerView
     private lateinit var cvTrackpad: CardView
     private lateinit var tabLayout: TabLayout
@@ -174,8 +175,9 @@ class MainActivity : AppCompatActivity() {
         btnGrantAccessibility = findViewById(R.id.btnGrantAccessibility)
         rvAppsHorizontal = findViewById(R.id.rvAppsHorizontal)
         cvTrackpad = findViewById(R.id.cvTrackpad)
-        btnZoomIn = findViewById(R.id.btnZoomIn)
-        btnZoomOut = findViewById(R.id.btnZoomOut)
+        cvZoomSlider = findViewById(R.id.cvZoomSlider)
+        viewSliderHandle = findViewById(R.id.viewSliderHandle)
+        tvSliderHint = findViewById(R.id.tvSliderHint)
         tvTrackpadInstruction = findViewById(R.id.tvTrackpadInstruction)
         viewCursorMirror = findViewById(R.id.viewCursorMirror)
         simulationContainer = findViewById(R.id.simulationContainer)
@@ -238,25 +240,52 @@ class MainActivity : AppCompatActivity() {
 
 
 
-        btnZoomIn.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    startContinuousZoom(true)
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    stopContinuousZoom()
-                }
-            }
-            true
-        }
+        var sliderStartX = 0f
+        var sliderLastTriggerX = 0f
 
-        btnZoomOut.setOnTouchListener { _, event ->
+        cvZoomSlider.setOnTouchListener { _, event ->
+            if (externalDisplayId == -1 && !isSimulating) {
+                return@setOnTouchListener false
+            }
+
+            val x = event.x
+
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    startContinuousZoom(false)
+                    sliderStartX = x
+                    sliderLastTriggerX = x
+                    tvSliderHint.animate().alpha(0f).setDuration(150).start()
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val deltaX = x - sliderStartX
+                    val maxTranslation = dpToPx(100).toFloat()
+                    val constrainedTranslation = deltaX.coerceIn(-maxTranslation, maxTranslation)
+                    viewSliderHandle.translationX = constrainedTranslation
+
+                    val totalDx = x - sliderLastTriggerX
+                    val threshold = dpToPx(16).toFloat()
+
+                    if (totalDx > threshold) {
+                        InteractionBridge.sendZoom(true)
+                        if (isSimulating) handleSimulatedZoom(true)
+                        val service = ControllerAccessibilityService.instance
+                        if (externalDisplayId != -1 && service != null) {
+                            service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, true)
+                        }
+                        sliderLastTriggerX += threshold
+                    } else if (totalDx < -threshold) {
+                        InteractionBridge.sendZoom(false)
+                        if (isSimulating) handleSimulatedZoom(false)
+                        val service = ControllerAccessibilityService.instance
+                        if (externalDisplayId != -1 && service != null) {
+                            service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, false)
+                        }
+                        sliderLastTriggerX -= threshold
+                    }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    stopContinuousZoom()
+                    viewSliderHandle.animate().translationX(0f).setDuration(200).start()
+                    tvSliderHint.animate().alpha(0.6f).setDuration(200).start()
                 }
             }
             true
