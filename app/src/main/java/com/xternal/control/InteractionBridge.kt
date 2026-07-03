@@ -13,6 +13,7 @@ object InteractionBridge {
     var textInputListener: ((String) -> Unit)? = null
     var appLaunchListener: ((String) -> Unit)? = null
     var zoomListener: ((Boolean) -> Unit)? = null
+    var pipModeListener: ((Boolean) -> Unit)? = null
     var isKeyboardActive: Boolean = false
 
     fun sendCursorMove(dx: Float, dy: Float) {
@@ -41,6 +42,10 @@ object InteractionBridge {
 
     fun sendZoom(isZoomIn: Boolean) {
         runOnMain { zoomListener?.invoke(isZoomIn) }
+    }
+
+    fun sendPipMode(enabled: Boolean) {
+        runOnMain { pipModeListener?.invoke(enabled) }
     }
 
     private fun runOnMain(action: () -> Unit) {

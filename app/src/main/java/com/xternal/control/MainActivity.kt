@@ -56,6 +56,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cvZoomSlider: View
     private lateinit var viewSliderHandle: View
     private lateinit var tvSliderHint: View
+    private lateinit var btnPipMode: View
     private lateinit var rvAppsHorizontal: RecyclerView
     private lateinit var cvTrackpad: CardView
     private lateinit var tabLayout: TabLayout
@@ -102,6 +103,7 @@ class MainActivity : AppCompatActivity() {
     private val zoomHandler = Handler(Looper.getMainLooper())
     private var zoomRunnable: Runnable? = null
     private var lastZoomTime = 0L
+    private var isPipModeActive = false
 
     // Simulated Glasses UI Views (when simulation mode is ON)
     private var simCursorX = 500f
@@ -181,6 +183,7 @@ class MainActivity : AppCompatActivity() {
         tvSliderHint = findViewById(R.id.tvSliderHint)
         tvTrackpadInstruction = findViewById(R.id.tvTrackpadInstruction)
         viewCursorMirror = findViewById(R.id.viewCursorMirror)
+        btnPipMode = findViewById(R.id.btnPipMode)
         simulationContainer = findViewById(R.id.simulationContainer)
 
         btnDonate = findViewById(R.id.btnDonate)
@@ -290,11 +293,16 @@ class MainActivity : AppCompatActivity() {
         }
 
 
+
         val btnTheaterMode = findViewById<View>(R.id.btnTheaterMode)
         val layoutTheaterModeOverlay = findViewById<View>(R.id.layoutTheaterModeOverlay)
 
         btnTheaterMode.setOnClickListener {
             enterTheaterMode()
+        }
+
+        btnPipMode.setOnClickListener {
+            togglePipPassThrough()
         }
 
         var lastTheaterClickTime: Long = 0
@@ -1291,6 +1299,38 @@ class MainActivity : AppCompatActivity() {
 
         Toast.makeText(this, "Screen Restored", Toast.LENGTH_SHORT).show()
     }
+
+    private fun togglePipPassThrough() {
+        isPipModeActive = !isPipModeActive
+        val tvBtn = btnPipMode as TextView
+        if (isPipModeActive) {
+            tvBtn.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_cyan)
+            tvBtn.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
+            Toast.makeText(this, "PiP Pass-Through Active (Glasses background is black)", Toast.LENGTH_SHORT).show()
+
+            // 1. Go Home on target display (Brings launcher to front, triggering YouTube/etc. to go into PiP Mode)
+            if (externalDisplayId != -1) {
+                try {
+                    val options = ActivityOptions.makeBasic()
+                    options.launchDisplayId = externalDisplayId
+                    val intent = Intent(this, ExternalActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                    }
+                    startActivity(intent, options.toBundle())
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        } else {
+            tvBtn.backgroundTintList = null
+            tvBtn.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+            Toast.makeText(this, "PiP Pass-Through Deactivated", Toast.LENGTH_SHORT).show()
+        }
+
+        // 2. Broadcast state change to ExternalActivity to toggle background black and hide/show launcher UI
+        InteractionBridge.sendPipMode(isPipModeActive)
+    }
+
 
     private fun dpToPx(dp: Int): Int {
         val density = resources.displayMetrics.density

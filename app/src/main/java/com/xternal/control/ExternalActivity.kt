@@ -50,6 +50,7 @@ class ExternalActivity : AppCompatActivity() {
     private var screenHeight = 1080f
     private var cursorX = 960f
     private var cursorY = 540f
+    private var isPipMode = false
     
     // Additional views
     private lateinit var layoutMapApp: View
@@ -73,6 +74,8 @@ class ExternalActivity : AppCompatActivity() {
         sharedPrefsListener?.let { prefs.unregisterOnSharedPreferenceChangeListener(it) }
         super.onDestroy()
     }
+
+
 
     private fun initViews() {
         rootContainer = findViewById(R.id.rootContainer)
@@ -360,6 +363,29 @@ class ExternalActivity : AppCompatActivity() {
                     mapZoomLevel = (mapZoomLevel - 0.2f).coerceAtLeast(0.5f)
                 }
                 updateMapZoomText()
+            }
+        }
+
+        // 8. PiP Mode Listener
+        InteractionBridge.pipModeListener = { enabled ->
+            isPipMode = enabled
+            runOnUiThread {
+                if (enabled) {
+                    rootContainer.setBackgroundColor(android.graphics.Color.BLACK)
+                    launcherContainer.visibility = View.INVISIBLE
+                    virtualAppContainer.visibility = View.INVISIBLE
+                } else {
+                    rootContainer.setBackgroundColor(0xFF0C0D12.toInt())
+                    if (layoutBrowserApp.visibility == View.VISIBLE || 
+                        layoutNotesApp.visibility == View.VISIBLE || 
+                        layoutMapApp.visibility == View.VISIBLE) {
+                        virtualAppContainer.visibility = View.VISIBLE
+                        launcherContainer.visibility = View.GONE
+                    } else {
+                        launcherContainer.visibility = View.VISIBLE
+                        virtualAppContainer.visibility = View.GONE
+                    }
+                }
             }
         }
     }
