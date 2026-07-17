@@ -57,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var viewSliderHandle: View
     private lateinit var tvSliderHint: View
     private lateinit var btnPipMode: View
+    private lateinit var btnToggleCursor: View
     private lateinit var rvAppsHorizontal: RecyclerView
     private lateinit var cvTrackpad: CardView
     private lateinit var tabLayout: TabLayout
@@ -104,6 +105,9 @@ class MainActivity : AppCompatActivity() {
     private var zoomRunnable: Runnable? = null
     private var lastZoomTime = 0L
     private var isPipModeActive = false
+    private var isCursorWindowAttached = false
+    private val cursorHideHandler = Handler(Looper.getMainLooper())
+    private val cursorHideRunnable = Runnable { hideOverlayCursor() }
 
     // Simulated Glasses UI Views (when simulation mode is ON)
     private var simCursorX = 500f
@@ -184,6 +188,7 @@ class MainActivity : AppCompatActivity() {
         tvTrackpadInstruction = findViewById(R.id.tvTrackpadInstruction)
         viewCursorMirror = findViewById(R.id.viewCursorMirror)
         btnPipMode = findViewById(R.id.btnPipMode)
+        btnToggleCursor = findViewById(R.id.btnToggleCursor)
         simulationContainer = findViewById(R.id.simulationContainer)
 
         btnDonate = findViewById(R.id.btnDonate)
@@ -303,6 +308,12 @@ class MainActivity : AppCompatActivity() {
 
         btnPipMode.setOnClickListener {
             togglePipPassThrough()
+        }
+
+        btnToggleCursor.setOnClickListener {
+            // Instantly hide the cursor to let DRM play
+            hideOverlayCursor()
+            Toast.makeText(this, "DRM Play Active (Cursor hidden)", Toast.LENGTH_SHORT).show()
         }
 
         var lastTheaterClickTime: Long = 0
@@ -560,7 +571,13 @@ class MainActivity : AppCompatActivity() {
     private fun deactivateTrackpadMode() {
         tvTrackpadInstruction.visibility = View.VISIBLE
         viewCursorMirror.visibility = View.GONE
+        cursorHideHandler.removeCallbacks(cursorHideRunnable)
         hideOverlayCursor()
+        runOnUiThread {
+            overlayCursorView = null
+            overlayWindowManager = null
+            overlayParams = null
+        }
     }
 
     private fun showOverlayCursor() {
@@ -569,48 +586,48 @@ class MainActivity : AppCompatActivity() {
 
         runOnUiThread {
             try {
-                if (overlayCursorView != null) {
-                    hideOverlayCursor()
-                }
-                
-                val display = displayManager.getDisplay(externalDisplayId) ?: return@runOnUiThread
-                // Create display context from applicationContext to prevent binding to activity token
-                val displayContext = applicationContext.createDisplayContext(display)
-                overlayWindowManager = displayContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                if (overlayCursorView == null) {
+                    val display = displayManager.getDisplay(externalDisplayId) ?: return@runOnUiThread
+                    val displayContext = applicationContext.createDisplayContext(display)
+                    overlayWindowManager = displayContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
-                // Query and store real screen resolution for cursor constraints
-                val metrics = DisplayMetrics()
-                display.getRealMetrics(metrics)
-                externalDisplayWidth = metrics.widthPixels
-                externalDisplayHeight = metrics.heightPixels
+                    // Query and store real screen resolution for cursor constraints
+                    val metrics = DisplayMetrics()
+                    display.getRealMetrics(metrics)
+                    externalDisplayWidth = metrics.widthPixels
+                    externalDisplayHeight = metrics.heightPixels
 
-                // Set cursor coordinates to center of screen if not yet initialized
-                if (overlayCursorX == 960f && overlayCursorY == 540f) {
-                    overlayCursorX = externalDisplayWidth / 2f
-                    overlayCursorY = externalDisplayHeight / 2f
-                }
+                    // Set cursor coordinates to center of screen if not yet initialized
+                    if (overlayCursorX == 960f && overlayCursorY == 540f) {
+                        overlayCursorX = externalDisplayWidth / 2f
+                        overlayCursorY = externalDisplayHeight / 2f
+                    }
 
-                overlayCursorView = ImageView(displayContext).apply {
-                    setImageResource(R.drawable.bg_cursor)
-                }
+                    overlayCursorView = ImageView(displayContext).apply {
+                        setImageResource(R.drawable.bg_cursor)
+                    }
 
-                overlayParams = WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.WRAP_CONTENT,
-                    WindowManager.LayoutParams.WRAP_CONTENT,
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                            WindowManager.LayoutParams.FLAG_SECURE,
-                    PixelFormat.TRANSLUCENT
-                ).apply {
-                    gravity = Gravity.TOP or Gravity.START
-                    x = overlayCursorX.toInt()
-                    y = overlayCursorY.toInt()
+                    overlayParams = WindowManager.LayoutParams(
+                        WindowManager.LayoutParams.WRAP_CONTENT,
+                        WindowManager.LayoutParams.WRAP_CONTENT,
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                                WindowManager.LayoutParams.FLAG_SECURE,
+                        PixelFormat.TRANSLUCENT
+                    ).apply {
+                        gravity = Gravity.TOP or Gravity.START
+                        x = overlayCursorX.toInt()
+                        y = overlayCursorY.toInt()
+                    }
                 }
 
-                overlayWindowManager?.addView(overlayCursorView, overlayParams)
+                if (!isCursorWindowAttached && overlayCursorView != null && overlayParams != null) {
+                    overlayWindowManager?.addView(overlayCursorView, overlayParams)
+                    isCursorWindowAttached = true
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -620,15 +637,13 @@ class MainActivity : AppCompatActivity() {
     private fun hideOverlayCursor() {
         runOnUiThread {
             try {
-                if (overlayCursorView != null && overlayWindowManager != null) {
+                if (isCursorWindowAttached && overlayCursorView != null && overlayWindowManager != null) {
                     overlayWindowManager?.removeView(overlayCursorView)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
-                overlayCursorView = null
-                overlayWindowManager = null
-                overlayParams = null
+                isCursorWindowAttached = false
             }
         }
     }
@@ -699,6 +714,9 @@ class MainActivity : AppCompatActivity() {
             if (externalDisplayId == -1 && !isSimulating) {
                 return@setOnTouchListener false
             }
+
+            cursorHideHandler.removeCallbacks(cursorHideRunnable)
+            showOverlayCursor()
 
             val x = event.x
             val y = event.y
@@ -798,6 +816,11 @@ class MainActivity : AppCompatActivity() {
                         accumulatedScrollDy = 0f
                     }
                     isMultiTouch = false
+                    cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    isMultiTouch = false
+                    cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
                 }
                 MotionEvent.ACTION_POINTER_UP -> {
                     val duration = System.currentTimeMillis() - downTime

@@ -537,6 +537,21 @@
                     android:clickable="true"
                     android:focusable="true"/>
 
+                <!-- DRM Play / Hide Cursor Button -->
+                <TextView
+                    android:id="@+id/btnToggleCursor"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_rounded_search"
+                    android:gravity="center"
+                    android:text="🎬"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:clickable="true"
+                    android:focusable="true"/>
+
             </LinearLayout>
 
         </LinearLayout>
