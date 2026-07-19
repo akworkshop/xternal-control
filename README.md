@@ -115,6 +115,48 @@ If you install the app from GitHub (sideloaded APK), Android 13+ may block you f
 
 ---
 
+## 1. Enabling Mirror Mode (Brand Guide)
+By default, some devices automatically launch custom desktop interfaces when connected to a monitor or AR glasses. Xternal Control requires standard screen mirroring to function correctly. 
+
+### For Samsung Devices (Disabling DeX)
+Samsung phones often launch **Samsung DeX** by default. You need to switch this off to enable Mirror Mode:
+1. Connect your phone to the external display using your USB-C cable or adapter.
+2. Swipe down from the top of your screen to open the **Quick Settings** panel.
+3. Look for the **DeX** icon. If it is highlighted/active, tap it to turn it off.
+4. Your external screen will instantly switch from the DeX desktop interface to mirror your exact phone screen.
+
+### For Google Pixel & Other Android Devices
+1. Connect your device to the external display.
+2. If a system popup asks how you want to use the display, select **Mirror Mode** or **Mirror Screen**.
+3. If your phone defaults to an experimental desktop layout, go to **Settings > Connected Devices > Connection Preferences** and ensure the external display configuration is set to mirror.
+
+---
+
+## 2. Enabling Accessibility Permissions (Overlay Cursor)
+Because the Xternal Control trackpad relies on an overlay cursor to navigate and control the external monitor, you must grant the app Accessibility permissions.
+
+1. Open your phone's **Settings** app.
+2. Scroll down and select **Accessibility**.
+3. Tap on **Installed Apps** (or **Downloaded Services** depending on your specific phone model).
+4. Find and select **Xternal Control**.
+5. Toggle the switch to **On** and confirm the permissions popup.
+
+---
+
+## 3. DRM Workaround (AppleTV, Netflix, etc.)
+> ⚠️ **Note:** Due to Digital Rights Management (DRM) restrictions, streaming apps like AppleTV may crash or show a black screen if they detect a persistent overlay cursor from third-party tools. Use the following workaround to bypass this restriction.
+
+1. **Establish Connection**
+   Connect your phone to the external screen and ensure it is running in **Mirror Mode**. Make sure you do not see any cursor visible on the external screen yet.
+2. **Launch the App**
+   Open the **Xternal Control** app on your phone, head to the app selection list, and open your desired streaming app (e.g., AppleTV). The app should load normally.
+3. **Navigate Content**
+   Use the Xternal Control trackpad interface on your phone to browse and click on the video content you want to watch. 
+4. **Allow Cursor to Fade**
+   When the video starts playing, the external screen may momentarily turn black because it detects the active overlay cursor. **Do not touch the trackpad.** After **5 seconds of inactivity**, the overlay cursor will automatically disappear, and your video content will immediately reappear on the display.
+
+---
+
 ## ❓ FAQ (Frequently Asked Questions)
 
 #### Q: Why does Google Play Protect show a warning during installation?
