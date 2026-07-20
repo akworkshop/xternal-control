@@ -464,6 +464,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 return
             }
+
+            // Teardown stale trackpad and overlay context before binding to new display ID
+            deactivateTrackpadMode()
             
             externalDisplayId = newDisplayId
             tvStatusBadge.text = "CONNECTED"

@@ -109,14 +109,7 @@ class ExternalActivity : AppCompatActivity() {
             cursorX = screenWidth / 2f
             cursorY = screenHeight / 2f
             
-            val displayId = window?.decorView?.display?.displayId ?: -1
-            if (displayId != -1 && displayId != android.view.Display.DEFAULT_DISPLAY) {
-                ivCursor.visibility = View.GONE
-            } else {
-                ivCursor.visibility = View.VISIBLE
-                ivCursor.x = cursorX
-                ivCursor.y = cursorY
-            }
+            ivCursor.visibility = View.GONE
         }
 
         // Click listeners for simulated app Close buttons
@@ -291,8 +284,6 @@ class ExternalActivity : AppCompatActivity() {
             val scaleFactor = 1.5f
             cursorX = (cursorX + dx * scaleFactor).coerceIn(0f, screenWidth)
             cursorY = (cursorY + dy * scaleFactor).coerceIn(0f, screenHeight)
-            ivCursor.x = cursorX
-            ivCursor.y = cursorY
         }
 
         // 2. Click/Tap Listener

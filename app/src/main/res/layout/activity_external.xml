@@ -363,13 +363,14 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- 3. Virtual Mouse Cursor pointer overlay -->
+    <!-- 3. Virtual Mouse Cursor pointer overlay (Disabled to prevent duplicate/ghost cursors) -->
     <ImageView
         android:id="@+id/ivCursor"
         android:layout_width="24dp"
         android:layout_height="24dp"
         android:src="@drawable/bg_cursor"
-        android:elevation="99dp" />
+        android:elevation="99dp"
+        android:visibility="gone" />
 
     <!-- 4. Faint cursor ripple visual indicator for clicks -->
     <View
