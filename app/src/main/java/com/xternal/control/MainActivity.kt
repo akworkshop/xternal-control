@@ -40,6 +40,12 @@ import java.util.ArrayList
 import android.util.DisplayMetrics
 import android.content.res.Configuration
 import com.google.android.material.tabs.TabLayout
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import java.io.File
+import java.io.FileOutputStream
+import android.graphics.BitmapFactory
+import android.graphics.Color
 
 class MainActivity : AppCompatActivity() {
 
@@ -108,6 +114,7 @@ class MainActivity : AppCompatActivity() {
     private var isCursorWindowAttached = false
     private val cursorHideHandler = Handler(Looper.getMainLooper())
     private val cursorHideRunnable = Runnable { hideOverlayCursor() }
+    private lateinit var pickWallpaperLauncher: ActivityResultLauncher<String>
 
     // Simulated Glasses UI Views (when simulation mode is ON)
     private var simCursorX = 500f
@@ -144,6 +151,10 @@ class MainActivity : AppCompatActivity() {
         // Initialize display manager
         displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         
+        pickWallpaperLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+            uri?.let { saveWallpaperFromUri(it) }
+        }
+
         loadListsFromPreferences()
         initViews()
         applyOrientationLayout()
@@ -151,6 +162,7 @@ class MainActivity : AppCompatActivity() {
         checkExternalDisplays()
         setupDisplayListener()
         setupTrackpad()
+        setupBackgroundCustomizer()
 
         // Double back press to exit prompt
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
@@ -1406,6 +1418,87 @@ class MainActivity : AppCompatActivity() {
         if (rvAppsHorizontal.layoutManager is GridLayoutManager) {
             (rvAppsHorizontal.layoutManager as GridLayoutManager).spanCount = columns
             appAdapter.notifyDataSetChanged()
+        }
+    }
+
+    private fun setGlassesBackgroundColor(colorHex: String, name: String) {
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("glasses_bg_type", "color")
+            .putString("glasses_bg_color", colorHex)
+            .apply()
+        Toast.makeText(this, "Glasses Theme: $name", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun saveWallpaperFromUri(uri: Uri) {
+        try {
+            val inputStream = contentResolver.openInputStream(uri) ?: return
+            val wallpaperFile = File(filesDir, "glasses_wallpaper.png")
+            val outputStream = FileOutputStream(wallpaperFile)
+            inputStream.copyTo(outputStream)
+            inputStream.close()
+            outputStream.close()
+
+            val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("glasses_bg_type", "image")
+                .putLong("glasses_bg_updated", System.currentTimeMillis())
+                .apply()
+
+            Toast.makeText(this, "Custom Gallery Wallpaper Set!", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Failed to load image: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setupBackgroundCustomizer() {
+        findViewById<View>(R.id.btnBgBlack)?.setOnClickListener {
+            setGlassesBackgroundColor("#000000", "OLED Black (Transparent AR)")
+        }
+        findViewById<View>(R.id.btnBgObsidian)?.setOnClickListener {
+            setGlassesBackgroundColor("#0A0B10", "Obsidian Dark")
+        }
+        findViewById<View>(R.id.btnBgCyber)?.setOnClickListener {
+            setGlassesBackgroundColor("#0D111E", "Cyber Neon Aura")
+        }
+        findViewById<View>(R.id.btnBgPurple)?.setOnClickListener {
+            setGlassesBackgroundColor("#130C1E", "Midnight Purple")
+        }
+        findViewById<View>(R.id.btnBgEmerald)?.setOnClickListener {
+            setGlassesBackgroundColor("#071912", "Emerald Matrix")
+        }
+
+        val etCustomHex = findViewById<EditText>(R.id.etCustomHex)
+        findViewById<View>(R.id.btnApplyHex)?.setOnClickListener {
+            val hex = etCustomHex?.text?.toString()?.trim() ?: ""
+            if (hex.isNotEmpty()) {
+                val formattedHex = if (hex.startsWith("#")) hex else "#$hex"
+                try {
+                    Color.parseColor(formattedHex)
+                    setGlassesBackgroundColor(formattedHex, "Custom Hex ($formattedHex)")
+                    etCustomHex.setText("")
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Invalid Hex Color (e.g., #2B003B)", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        findViewById<View>(R.id.btnPickWallpaper)?.setOnClickListener {
+            try {
+                pickWallpaperLauncher.launch("image/*")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(this, "Cannot open gallery picker", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        findViewById<View>(R.id.btnClearWallpaper)?.setOnClickListener {
+            val wallpaperFile = File(filesDir, "glasses_wallpaper.png")
+            if (wallpaperFile.exists()) {
+                wallpaperFile.delete()
+            }
+            setGlassesBackgroundColor("#000000", "OLED Black (Image Cleared)")
         }
     }
 }

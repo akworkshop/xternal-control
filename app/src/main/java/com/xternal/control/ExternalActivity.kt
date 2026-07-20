@@ -58,6 +58,22 @@ class ExternalActivity : AppCompatActivity() {
     private lateinit var cvExtNavBar: View
     private var mapZoomLevel = 1.0f
 
+    // Flauncher UI & Custom Wallpaper Elements
+    private lateinit var ivExtBackground: ImageView
+    private lateinit var tvClock: TextView
+    private lateinit var tvDate: TextView
+    private lateinit var rvFavAppsShelf: RecyclerView
+    private lateinit var tvFavEmptyState: TextView
+    private lateinit var favAdapter: FavAppsAdapter
+
+    private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val clockRunnable = object : Runnable {
+        override fun run() {
+            updateClock()
+            clockHandler.postDelayed(this, 1000)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_external)
@@ -91,6 +107,12 @@ class ExternalActivity : AppCompatActivity() {
         layoutMapApp = findViewById(R.id.layoutMapApp)
         tvMapCoords = findViewById(R.id.tvMapCoords)
         cvExtNavBar = findViewById(R.id.cvExtNavBar)
+
+        ivExtBackground = findViewById(R.id.ivExtBackground)
+        tvClock = findViewById(R.id.tvClock)
+        tvDate = findViewById(R.id.tvDate)
+        rvFavAppsShelf = findViewById(R.id.rvFavAppsShelf)
+        tvFavEmptyState = findViewById(R.id.tvFavEmptyState)
 
         val etExtAppSearch = findViewById<EditText>(R.id.etExtAppSearch)
         etExtAppSearch.addTextChangedListener(object : TextWatcher {
@@ -172,6 +194,19 @@ class ExternalActivity : AppCompatActivity() {
         allApps = apps.distinctBy { it.packageName }
         applyPlayStoreAppRestrictions()
 
+        // Setup Favorites Shelf Adapter
+        favAdapter = FavAppsAdapter(
+            apps = emptyList(),
+            onItemClick = { app ->
+                launchApp(app.packageName)
+            },
+            onItemLongClick = { app ->
+                toggleAppFavourite(app)
+            }
+        )
+        rvFavAppsShelf.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this, androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false)
+        rvFavAppsShelf.adapter = favAdapter
+
         // External launcher uses a 5-column grid layout
         gridAdapter = AppListAdapter(
             apps = allApps,
@@ -215,6 +250,17 @@ class ExternalActivity : AppCompatActivity() {
         // Set isFavourite status on filteredApps based on favouritePackages
         for (app in filteredApps) {
             app.isFavourite = favouritePackages.contains(app.packageName)
+        }
+
+        // Update Favorites Shelf
+        val favApps = allApps.filter { favouritePackages.contains(it.packageName) }
+        if (favApps.isEmpty()) {
+            tvFavEmptyState.visibility = View.VISIBLE
+            rvFavAppsShelf.visibility = View.GONE
+        } else {
+            tvFavEmptyState.visibility = View.GONE
+            rvFavAppsShelf.visibility = View.VISIBLE
+            favAdapter.updateData(favApps)
         }
 
         // Re-sort the app list:
@@ -273,6 +319,8 @@ class ExternalActivity : AppCompatActivity() {
             if (key == "recent_packages" || key == "favourite_packages") {
                 loadListsFromPreferences()
                 sortAndRefreshAppLists()
+            } else if (key == "glasses_bg_type" || key == "glasses_bg_color" || key == "glasses_bg_updated") {
+                runOnUiThread { applyBackgroundTheme() }
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(sharedPrefsListener)
@@ -533,8 +581,101 @@ class ExternalActivity : AppCompatActivity() {
             .show()
     }
 
+    override fun onResume() {
+        super.onResume()
+        applyBackgroundTheme()
+        clockHandler.post(clockRunnable)
+    }
+
+    override fun onPause() {
+        clockHandler.removeCallbacks(clockRunnable)
+        super.onPause()
+    }
+
+    private fun applyBackgroundTheme() {
+        if (isPipMode) return
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        val bgType = prefs.getString("glasses_bg_type", "color") ?: "color"
+
+        if (bgType == "image") {
+            val wallpaperFile = java.io.File(filesDir, "glasses_wallpaper.png")
+            if (wallpaperFile.exists()) {
+                val bitmap = android.graphics.BitmapFactory.decodeFile(wallpaperFile.absolutePath)
+                if (bitmap != null) {
+                    ivExtBackground.setImageBitmap(bitmap)
+                    ivExtBackground.visibility = View.VISIBLE
+                    rootContainer.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    return
+                }
+            }
+        }
+
+        // Fallback / Color mode
+        ivExtBackground.visibility = View.GONE
+        val colorHex = prefs.getString("glasses_bg_color", "#000000") ?: "#000000"
+        try {
+            val parsedColor = android.graphics.Color.parseColor(colorHex)
+            rootContainer.setBackgroundColor(parsedColor)
+        } catch (e: Exception) {
+            rootContainer.setBackgroundColor(android.graphics.Color.BLACK)
+        }
+    }
+
+    private fun updateClock() {
+        val now = java.util.Date()
+        val timeFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
+        val dateFormat = java.text.SimpleDateFormat("E, MMM d", java.util.Locale.getDefault())
+        tvClock.text = timeFormat.format(now)
+        tvDate.text = dateFormat.format(now)
+    }
+
     private fun dpToPx(dp: Int): Int {
         val density = resources.displayMetrics.density
         return (dp * density).toInt()
+    }
+}
+
+class FavAppsAdapter(
+    private var apps: List<AppInfo>,
+    private val onItemClick: (AppInfo) -> Unit,
+    private val onItemLongClick: (AppInfo) -> Unit
+) : RecyclerView.Adapter<FavAppsAdapter.ViewHolder>() {
+
+    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val ivAppIcon: ImageView = view.findViewById(R.id.ivAppIcon)
+        val tvAppName: TextView = view.findViewById(R.id.tvAppName)
+        val tvLockBadge: TextView = view.findViewById(R.id.tvLockBadge)
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val view = android.view.LayoutInflater.from(parent.context).inflate(R.layout.item_app_favorite_tv, parent, false)
+        return ViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        val app = apps[position]
+        holder.tvAppName.text = app.label
+        holder.ivAppIcon.setImageDrawable(app.icon)
+
+        if (app.isLocked) {
+            holder.itemView.alpha = 0.4f
+            holder.tvLockBadge.visibility = View.VISIBLE
+        } else {
+            holder.itemView.alpha = 1.0f
+            holder.tvLockBadge.visibility = View.GONE
+        }
+
+        holder.itemView.setOnClickListener { onItemClick(app) }
+        holder.itemView.setOnLongClickListener {
+            onItemLongClick(app)
+            true
+        }
+    }
+
+    override fun getItemCount(): Int = apps.size
+
+    fun updateData(newApps: List<AppInfo>) {
+        this.apps = newApps
+        notifyDataSetChanged()
     }
 }

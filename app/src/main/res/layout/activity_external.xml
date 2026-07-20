@@ -7,51 +7,151 @@
     android:layout_height="match_parent"
     android:background="@color/bg_obsidian">
 
-    <!-- 1. Launcher View Container -->
+    <!-- Custom Background Image Layer -->
+    <ImageView
+        android:id="@+id/ivExtBackground"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+    <!-- 1. Launcher View Container (Flauncher / Android TV Style) -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/launcherContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:padding="24dp">
+        android:padding="20dp">
 
-        <!-- Header/Status Info -->
+        <!-- Top Header Bar -->
+        <RelativeLayout
+            android:id="@+id/headerBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true">
+
+                <TextView
+                    android:id="@+id/tvClock"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="10:25 PM"
+                    android:textColor="@color/text_primary"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvDate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Mon, Jul 20"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Status Info Badge -->
+            <TextView
+                android:id="@+id/tvExtHeader"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:background="@drawable/bg_rounded_search"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="6dp"
+                android:text="GLASSES 1080P"
+                android:textColor="@color/neon_emerald"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.05" />
+        </RelativeLayout>
+
+        <!-- ⭐ FAVORITE APPS SECTION -->
         <TextView
-            android:id="@+id/tvExtHeader"
+            android:id="@+id/tvFavHeader"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="AR GLASSES VIRTUAL DISPLAY (1080P)"
+            android:layout_marginTop="14dp"
+            android:text="⭐ FAVORITE APPS"
+            android:textColor="@color/neon_cyan"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08"
+            app:layout_constraintTop_toBottomOf="@id/headerBar"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <TextView
+            android:id="@+id/tvFavEmptyState"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Tip: Long-click any app below on your controller to pin to Favorites."
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/tvFavHeader"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvFavAppsShelf"
+            android:layout_width="match_parent"
+            android:layout_height="126dp"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal"
+            android:scrollbars="none"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            app:layout_constraintTop_toBottomOf="@id/tvFavEmptyState"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            tools:listitem="@layout/item_app_favorite_tv" />
+
+        <!-- 📱 ALL APPLICATIONS SECTION -->
+        <TextView
+            android:id="@+id/tvAllAppsHeader"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="📱 ALL APPLICATIONS"
             android:textColor="@color/text_secondary"
             android:textSize="12sp"
             android:textStyle="bold"
-            android:letterSpacing="0.1"
-            app:layout_constraintTop_toTopOf="parent"
+            android:letterSpacing="0.08"
+            app:layout_constraintTop_toBottomOf="@id/rvFavAppsShelf"
             app:layout_constraintStart_toStartOf="parent" />
 
         <!-- App Search Bar -->
         <EditText
             android:id="@+id/etExtAppSearch"
             android:layout_width="match_parent"
-            android:layout_height="36dp"
-            android:layout_marginTop="8dp"
+            android:layout_height="34dp"
+            android:layout_marginTop="6dp"
             android:background="@drawable/bg_rounded_search"
             android:hint="Search apps..."
             android:textColorHint="@color/text_secondary"
             android:textColor="@color/text_primary"
             android:textSize="12sp"
-            android:paddingHorizontal="16dp"
+            android:paddingHorizontal="14dp"
             android:inputType="text"
             android:maxLines="1"
             android:imeOptions="actionSearch"
-            app:layout_constraintTop_toBottomOf="@id/tvExtHeader"
+            app:layout_constraintTop_toBottomOf="@id/tvAllAppsHeader"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 
-        <!-- App Grid -->
+        <!-- All Apps Grid -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvAppsGrid"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:scrollbars="vertical"
             app:layout_constraintTop_toBottomOf="@id/etExtAppSearch"
             app:layout_constraintBottom_toBottomOf="parent"

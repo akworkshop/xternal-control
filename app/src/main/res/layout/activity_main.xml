@@ -222,6 +222,172 @@
                     </LinearLayout>
                 </androidx.cardview.widget.CardView>
 
+                <!-- Glasses Background Customizer Card -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/cardBackgroundTheme"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    app:cardCornerRadius="16dp"
+                    app:cardBackgroundColor="@color/bg_panel">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="GLASSES BACKGROUND THEME"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.05"/>
+
+                        <!-- Preset Colors Chips -->
+                        <HorizontalScrollView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:scrollbars="none">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal">
+
+                                <Button
+                                    android:id="@+id/btnBgBlack"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="34dp"
+                                    android:text="🖤 OLED Black"
+                                    android:textSize="10sp"
+                                    android:paddingHorizontal="10dp"
+                                    android:backgroundTint="#000000"
+                                    android:textColor="@color/text_primary"
+                                    app:cornerRadius="6dp"/>
+
+                                <Button
+                                    android:id="@+id/btnBgObsidian"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="34dp"
+                                    android:layout_marginStart="6dp"
+                                    android:text="🌌 Obsidian"
+                                    android:textSize="10sp"
+                                    android:paddingHorizontal="10dp"
+                                    android:backgroundTint="#0A0B10"
+                                    android:textColor="@color/text_primary"
+                                    app:cornerRadius="6dp"/>
+
+                                <Button
+                                    android:id="@+id/btnBgCyber"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="34dp"
+                                    android:layout_marginStart="6dp"
+                                    android:text="🔷 Cyber"
+                                    android:textSize="10sp"
+                                    android:paddingHorizontal="10dp"
+                                    android:backgroundTint="#0D111E"
+                                    android:textColor="@color/neon_cyan"
+                                    app:cornerRadius="6dp"/>
+
+                                <Button
+                                    android:id="@+id/btnBgPurple"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="34dp"
+                                    android:layout_marginStart="6dp"
+                                    android:text="🟣 Purple"
+                                    android:textSize="10sp"
+                                    android:paddingHorizontal="10dp"
+                                    android:backgroundTint="#130C1E"
+                                    android:textColor="@color/text_primary"
+                                    app:cornerRadius="6dp"/>
+
+                                <Button
+                                    android:id="@+id/btnBgEmerald"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="34dp"
+                                    android:layout_marginStart="6dp"
+                                    android:text="🟢 Emerald"
+                                    android:textSize="10sp"
+                                    android:paddingHorizontal="10dp"
+                                    android:backgroundTint="#071912"
+                                    android:textColor="@color/neon_emerald"
+                                    app:cornerRadius="6dp"/>
+                            </LinearLayout>
+                        </HorizontalScrollView>
+
+                        <!-- Custom Hex Color Input -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="8dp">
+
+                            <EditText
+                                android:id="@+id/etCustomHex"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:background="@drawable/bg_rounded_search"
+                                android:hint="Custom Hex (e.g. #2B003B)"
+                                android:textColorHint="@color/text_secondary"
+                                android:textColor="@color/text_primary"
+                                android:textSize="11sp"
+                                android:paddingHorizontal="10dp"
+                                android:inputType="text"
+                                android:maxLines="1"/>
+
+                            <Button
+                                android:id="@+id/btnApplyHex"
+                                android:layout_width="wrap_content"
+                                android:layout_height="34dp"
+                                android:layout_marginStart="6dp"
+                                android:text="APPLY"
+                                android:textSize="10sp"
+                                android:backgroundTint="@color/neon_cyan"
+                                android:textColor="@color/text_dark"
+                                android:paddingHorizontal="12dp"
+                                app:cornerRadius="6dp"/>
+                        </LinearLayout>
+
+                        <!-- Custom Image Picker Controls -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="8dp">
+
+                            <Button
+                                android:id="@+id/btnPickWallpaper"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:text="🖼️ PICK GALLERY WALLPAPER"
+                                android:textSize="10sp"
+                                android:backgroundTint="@color/neon_violet"
+                                android:textColor="@color/text_primary"
+                                android:paddingHorizontal="8dp"
+                                app:cornerRadius="6dp"/>
+
+                            <Button
+                                android:id="@+id/btnClearWallpaper"
+                                android:layout_width="wrap_content"
+                                android:layout_height="34dp"
+                                android:layout_marginStart="6dp"
+                                android:text="❌ CLEAR IMAGE"
+                                android:textSize="10sp"
+                                android:backgroundTint="@color/bg_card"
+                                android:textColor="@color/text_secondary"
+                                android:paddingHorizontal="10dp"
+                                app:cornerRadius="6dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
                 <!-- Donation Card -->
                 <androidx.cardview.widget.CardView
                     android:id="@+id/cardDonation"
