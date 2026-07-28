@@ -65,6 +65,8 @@ class ExternalActivity : AppCompatActivity() {
     private lateinit var rvFavAppsShelf: RecyclerView
     private lateinit var tvFavEmptyState: TextView
     private lateinit var favAdapter: FavAppsAdapter
+    private lateinit var layoutAllAppsOverlay: View
+    private lateinit var btnCloseAllApps: View
 
     private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val clockRunnable = object : Runnable {
@@ -80,6 +82,7 @@ class ExternalActivity : AppCompatActivity() {
 
         loadListsFromPreferences()
         initViews()
+        tryEnableHighestResolution()
         loadInstalledApps()
         setupInteractionBridge()
         setupSharedPreferencesListener()
@@ -113,6 +116,39 @@ class ExternalActivity : AppCompatActivity() {
         tvDate = findViewById(R.id.tvDate)
         rvFavAppsShelf = findViewById(R.id.rvFavAppsShelf)
         tvFavEmptyState = findViewById(R.id.tvFavEmptyState)
+        layoutAllAppsOverlay = findViewById(R.id.layoutAllAppsOverlay)
+        btnCloseAllApps = findViewById(R.id.btnCloseAllApps)
+        btnCloseAllApps.setOnClickListener {
+            layoutAllAppsOverlay.visibility = View.GONE
+        }
+
+        val btnInfoGuide = findViewById<View>(R.id.btnInfoGuide)
+        btnInfoGuide?.setOnClickListener {
+            showGuideDialog()
+        }
+
+        val cardAllAppsBanner = findViewById<View>(R.id.cardAllAppsBanner)
+        cardAllAppsBanner?.setOnClickListener {
+            layoutAllAppsOverlay.visibility = View.VISIBLE
+        }
+
+        val cardSupportBanner = findViewById<View>(R.id.cardSupportBanner)
+        if (cardSupportBanner != null) {
+            if (BuildConfig.FLAVOR == "github") {
+                cardSupportBanner.visibility = View.VISIBLE
+                val btnBuyMeCoffee = findViewById<View>(R.id.btnBuyMeCoffee)
+                btnBuyMeCoffee?.setOnClickListener {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://buymeacoffee.com/akworkshop"))
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            } else {
+                cardSupportBanner.visibility = View.GONE
+            }
+        }
 
         val etExtAppSearch = findViewById<EditText>(R.id.etExtAppSearch)
         etExtAppSearch.addTextChangedListener(object : TextWatcher {
@@ -124,7 +160,7 @@ class ExternalActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // Capture display dimensions once loaded
+        // Capture display dimensions once loaded & detect real hardware resolution
         rootContainer.post {
             screenWidth = rootContainer.width.toFloat()
             screenHeight = rootContainer.height.toFloat()
@@ -132,6 +168,30 @@ class ExternalActivity : AppCompatActivity() {
             cursorY = screenHeight / 2f
             
             ivCursor.visibility = View.GONE
+
+            val tvExtHeader = findViewById<TextView>(R.id.tvExtHeader)
+            if (tvExtHeader != null) {
+                try {
+                    val display = window?.decorView?.display
+                    if (display != null) {
+                        val mode = display.mode
+                        val pWidth = mode.physicalWidth
+                        val pHeight = mode.physicalHeight
+                        val resLabel = if (pWidth >= 3840 || pHeight >= 3840) {
+                            "4K $pWidth×$pHeight"
+                        } else if (pWidth >= 2560 || pHeight >= 2560) {
+                            "2K $pWidth×$pHeight"
+                        } else if (pWidth >= 1920 || pHeight >= 1920) {
+                            "1080P $pWidth×$pHeight"
+                        } else {
+                            "$pWidth×$pHeight"
+                        }
+                        tvExtHeader.text = resLabel
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         }
 
         // Click listeners for simulated app Close buttons
@@ -184,10 +244,17 @@ class ExternalActivity : AppCompatActivity() {
         val apps = ArrayList<AppInfo>()
         for (info in resolveInfos) {
             if (info.activityInfo.packageName == packageName) continue
+            val bannerDrawable = info.activityInfo.loadBanner(pm)
+                ?: info.activityInfo.applicationInfo.loadBanner(pm)
+            val iconDrawable = info.loadIcon(pm)
+            val domColor = if (bannerDrawable == null) extractDominantColor(iconDrawable) else null
+
             val appInfo = AppInfo(
                 label = info.loadLabel(pm).toString(),
                 packageName = info.activityInfo.packageName,
-                icon = info.loadIcon(pm)
+                icon = iconDrawable,
+                banner = bannerDrawable,
+                dominantColor = domColor
             )
             apps.add(appInfo)
         }
@@ -204,21 +271,26 @@ class ExternalActivity : AppCompatActivity() {
                 toggleAppFavourite(app)
             }
         )
-        rvFavAppsShelf.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this, androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false)
+        val metrics = resources.displayMetrics
+        val screenWidthDp = metrics.widthPixels / metrics.density
+        val calculatedSpan = (screenWidthDp / 200).toInt().coerceAtLeast(3)
+
+        rvFavAppsShelf.layoutManager = GridLayoutManager(this, calculatedSpan)
         rvFavAppsShelf.adapter = favAdapter
 
-        // External launcher uses a 5-column grid layout
+        // External launcher uses a dynamic grid layout for wide TV banners
         gridAdapter = AppListAdapter(
             apps = allApps,
             isGridLayout = true,
             onItemClick = { app ->
+                layoutAllAppsOverlay.visibility = View.GONE
                 launchApp(app.packageName)
             },
             onItemLongClick = { app ->
                 toggleAppFavourite(app)
             }
         )
-        rvAppsGrid.layoutManager = GridLayoutManager(this, 5)
+        rvAppsGrid.layoutManager = GridLayoutManager(this, calculatedSpan)
         rvAppsGrid.adapter = gridAdapter
         sortAndRefreshAppLists()
     }
@@ -254,14 +326,15 @@ class ExternalActivity : AppCompatActivity() {
 
         // Update Favorites Shelf
         val favApps = allApps.filter { favouritePackages.contains(it.packageName) }
+
         if (favApps.isEmpty()) {
             tvFavEmptyState.visibility = View.VISIBLE
-            rvFavAppsShelf.visibility = View.GONE
         } else {
             tvFavEmptyState.visibility = View.GONE
-            rvFavAppsShelf.visibility = View.VISIBLE
-            favAdapter.updateData(favApps)
         }
+
+        favAdapter.updateData(favApps)
+        rvFavAppsShelf.visibility = View.VISIBLE
 
         // Re-sort the app list:
         // 1. Unlocked trial apps first (Play Store flavor only)
@@ -410,19 +483,22 @@ class ExternalActivity : AppCompatActivity() {
             isPipMode = enabled
             runOnUiThread {
                 if (enabled) {
+                    ivExtBackground.visibility = View.GONE
                     rootContainer.setBackgroundColor(android.graphics.Color.BLACK)
                     launcherContainer.visibility = View.INVISIBLE
                     virtualAppContainer.visibility = View.INVISIBLE
                 } else {
-                    rootContainer.setBackgroundColor(0xFF0C0D12.toInt())
                     if (layoutBrowserApp.visibility == View.VISIBLE || 
                         layoutNotesApp.visibility == View.VISIBLE || 
                         layoutMapApp.visibility == View.VISIBLE) {
+                        ivExtBackground.visibility = View.GONE
+                        rootContainer.setBackgroundColor(android.graphics.Color.BLACK)
                         virtualAppContainer.visibility = View.VISIBLE
                         launcherContainer.visibility = View.GONE
                     } else {
                         launcherContainer.visibility = View.VISIBLE
                         virtualAppContainer.visibility = View.GONE
+                        applyBackgroundTheme()
                     }
                 }
             }
@@ -440,6 +516,10 @@ class ExternalActivity : AppCompatActivity() {
             showProUpgradeDialog()
             return
         }
+        // Turn background to pure OLED black during app usage to avoid wallpaper bleed-through
+        ivExtBackground.visibility = View.GONE
+        rootContainer.setBackgroundColor(android.graphics.Color.BLACK)
+
         // Track recents: move to start
         recentPackages.remove(packageName)
         recentPackages.add(0, packageName)
@@ -484,6 +564,23 @@ class ExternalActivity : AppCompatActivity() {
             }
         }
         cvContextMenu.visibility = View.GONE
+    }
+
+    private fun tryEnableHighestResolution() {
+        try {
+            val display = window?.decorView?.display ?: return
+            val modes = display.supportedModes
+            if (modes != null && modes.isNotEmpty()) {
+                val maxMode = modes.maxByOrNull { it.physicalWidth * it.physicalHeight }
+                if (maxMode != null && maxMode.modeId != display.mode.modeId) {
+                    val lp = window.attributes
+                    lp.preferredDisplayModeId = maxMode.modeId
+                    window.attributes = lp
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun closeVirtualApps(keepNavBar: Boolean = false) {
@@ -573,12 +670,44 @@ class ExternalActivity : AppCompatActivity() {
         }
     }
 
+    private fun showGuideDialog() {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("ℹ️ Control Guide & Tips")
+            .setMessage("👆 Trackpad Controls:\n• Tap trackpad to select\n• Use 2 fingers to scroll lists\n\n🎬 Apple TV / Netflix / DRM Fix:\n• Black screen or video won't play? Tap the 🎬 button on your phone controller to auto-hide the cursor overlay and play DRM content.\n\n📱 App Won't Open:\n• Launch the app directly from your phone controller's APPS tab!")
+            .setPositiveButton("Got It!", null)
+            .show()
+    }
+
     private fun showProUpgradeDialog() {
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle("Pro Feature")
             .setMessage("Launching this app is a Pro feature.\n\nIn-app purchases are coming soon to unlock unlimited apps!")
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    private fun showDonationDialog() {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Support the Creator")
+            .setMessage("Do you like using Xternal Control?\n\nIf this app has been useful to you, please consider supporting the creator. Your support makes a meaningful contribution to my family with a special needs child.\n\nEverything remains fully free to use!")
+            .setPositiveButton("☕ Buy Me a Coffee") { _, _ ->
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://buymeacoffee.com/akworkshop"))
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            .setNegativeButton("Maybe Later", null)
+            .show()
+    }
+
+    override fun onBackPressed() {
+        if (::layoutAllAppsOverlay.isInitialized && layoutAllAppsOverlay.visibility == View.VISIBLE) {
+            layoutAllAppsOverlay.visibility = View.GONE
+            return
+        }
+        super.onBackPressed()
     }
 
     override fun onResume() {
@@ -629,6 +758,74 @@ class ExternalActivity : AppCompatActivity() {
         tvDate.text = dateFormat.format(now)
     }
 
+    private fun extractDominantColor(drawable: android.graphics.drawable.Drawable): Int {
+        try {
+            val bitmap = when (drawable) {
+                is android.graphics.drawable.BitmapDrawable -> drawable.bitmap
+                else -> {
+                    val bmp = android.graphics.Bitmap.createBitmap(
+                        drawable.intrinsicWidth.coerceAtLeast(1),
+                        drawable.intrinsicHeight.coerceAtLeast(1),
+                        android.graphics.Bitmap.Config.ARGB_8888
+                    )
+                    val canvas = android.graphics.Canvas(bmp)
+                    drawable.setBounds(0, 0, canvas.width, canvas.height)
+                    drawable.draw(canvas)
+                    bmp
+                }
+            }
+
+            var colorCount = 0
+            var redSum = 0L
+            var greenSum = 0L
+            var blueSum = 0L
+
+            val w = bitmap.width
+            val h = bitmap.height
+            val stepX = (w / 15).coerceAtLeast(1)
+            val stepY = (h / 15).coerceAtLeast(1)
+
+            for (x in 0 until w step stepX) {
+                for (y in 0 until h step stepY) {
+                    val pixel = bitmap.getPixel(x, y)
+                    val alpha = android.graphics.Color.alpha(pixel)
+                    val r = android.graphics.Color.red(pixel)
+                    val g = android.graphics.Color.green(pixel)
+                    val b = android.graphics.Color.blue(pixel)
+
+                    val isWhite = r > 225 && g > 225 && b > 225
+                    val isBlack = r < 30 && g < 30 && b < 30
+
+                    if (alpha > 150 && !isWhite && !isBlack) {
+                        redSum += r
+                        greenSum += g
+                        blueSum += b
+                        colorCount++
+                    }
+                }
+            }
+
+            if (colorCount > 0) {
+                val r = (redSum / colorCount).toInt()
+                val g = (greenSum / colorCount).toInt()
+                val b = (blueSum / colorCount).toInt()
+
+                val hsv = FloatArray(3)
+                android.graphics.Color.RGBToHSV(r, g, b, hsv)
+
+                if (hsv[1] > 0.08f) {
+                    hsv[1] = hsv[1].coerceAtLeast(0.60f)
+                }
+                hsv[2] = 0.42f
+
+                return android.graphics.Color.HSVToColor(hsv)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return 0xFF202738.toInt()
+    }
+
     private fun dpToPx(dp: Int): Int {
         val density = resources.displayMetrics.density
         return (dp * density).toInt()
@@ -642,20 +839,36 @@ class FavAppsAdapter(
 ) : RecyclerView.Adapter<FavAppsAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val cardTvBanner: androidx.cardview.widget.CardView = view.findViewById(R.id.cardTvBanner)
+        val ivBanner: ImageView = view.findViewById(R.id.ivBanner)
+        val layoutFallbackContent: View = view.findViewById(R.id.layoutFallbackContent)
         val ivAppIcon: ImageView = view.findViewById(R.id.ivAppIcon)
         val tvAppName: TextView = view.findViewById(R.id.tvAppName)
         val tvLockBadge: TextView = view.findViewById(R.id.tvLockBadge)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = android.view.LayoutInflater.from(parent.context).inflate(R.layout.item_app_favorite_tv, parent, false)
+        val view = android.view.LayoutInflater.from(parent.context).inflate(R.layout.item_app_tv_banner, parent, false)
         return ViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val app = apps[position]
-        holder.tvAppName.text = app.label
-        holder.ivAppIcon.setImageDrawable(app.icon)
+
+        if (app.banner != null) {
+            holder.ivBanner.setImageDrawable(app.banner)
+            holder.ivBanner.visibility = View.VISIBLE
+            holder.layoutFallbackContent.visibility = View.GONE
+            holder.cardTvBanner.setCardBackgroundColor(0xFF0C0D12.toInt())
+        } else {
+            holder.ivBanner.visibility = View.GONE
+            holder.layoutFallbackContent.visibility = View.VISIBLE
+            holder.ivAppIcon.setImageDrawable(app.icon)
+            holder.tvAppName.text = app.label
+
+            val cardColor = app.dominantColor ?: 0xFF1C202E.toInt()
+            holder.cardTvBanner.setCardBackgroundColor(cardColor)
+        }
 
         if (app.isLocked) {
             holder.itemView.alpha = 0.4f

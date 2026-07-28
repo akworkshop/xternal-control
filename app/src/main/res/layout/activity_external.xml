@@ -55,6 +55,29 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="11sp"
                     android:textStyle="bold" />
+
+                <!-- ℹ️ Info Guide Button (Taller & Under Time) -->
+                <LinearLayout
+                    android:id="@+id/btnInfoGuide"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_rounded_search"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="8dp"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ℹ️ GUIDE"
+                        android:textColor="@color/neon_cyan"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- Status Info Badge -->
@@ -74,90 +97,225 @@
                 android:letterSpacing="0.05" />
         </RelativeLayout>
 
-        <!-- ⭐ FAVORITE APPS SECTION -->
+        <!-- ALL APPS & 💖 SUPPORT BANNER ROW -->
+        <LinearLayout
+            android:id="@+id/layoutTopButtonsRow"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:layout_marginBottom="8dp"
+            android:orientation="horizontal"
+            app:layout_constraintBottom_toTopOf="@id/tvFavHeader"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <!-- "ALL APPS" TV Banner Button (Left 30% Width - Clean Text Only) -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardAllAppsBanner"
+                android:layout_width="140dp"
+                android:layout_height="match_parent"
+                app:cardCornerRadius="12dp"
+                app:cardBackgroundColor="@color/bg_card"
+                app:cardElevation="4dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground">
+
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:padding="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerInParent="true"
+                        android:text="ALL APPS"
+                        android:textColor="@color/neon_cyan"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.08" />
+
+                </RelativeLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- 💖 Support Creator Banner Card (Right Remaining Width - GitHub Flavor Only) -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardSupportBanner"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                app:cardCornerRadius="12dp"
+                app:cardBackgroundColor="@color/bg_card"
+                app:cardElevation="4dp">
+
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="6dp">
+
+                    <TextView
+                        android:id="@+id/tvSupportMsg"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@id/btnBuyMeCoffee"
+                        android:layout_marginEnd="6dp"
+                        android:layout_centerVertical="true"
+                        android:text="Love my app? If you like my app, you can support me by buying me a coffee! It will be a great support for my family."
+                        android:textColor="@color/text_primary"
+                        android:textSize="9sp"
+                        android:maxLines="3"
+                        android:ellipsize="end" />
+
+                    <LinearLayout
+                        android:id="@+id/btnBuyMeCoffee"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:background="@drawable/bg_rounded_search"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="5dp"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="☕ BUY ME A COFFEE"
+                            android:textColor="@color/neon_cyan"
+                            android:textSize="9sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                </RelativeLayout>
+            </androidx.cardview.widget.CardView>
+
+        </LinearLayout>
+
+        <!-- ⭐ FAVORITE APPS BOTTOM DOCK (2.25 ROWS PEEKING GRID) -->
         <TextView
             android:id="@+id/tvFavHeader"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:text="⭐ FAVORITE APPS"
+            android:layout_marginBottom="4dp"
+            android:text="⭐ FAVORITES"
             android:textColor="@color/neon_cyan"
             android:textSize="12sp"
             android:textStyle="bold"
             android:letterSpacing="0.08"
-            app:layout_constraintTop_toBottomOf="@id/headerBar"
+            app:layout_constraintBottom_toTopOf="@id/rvFavAppsShelf"
             app:layout_constraintStart_toStartOf="parent" />
 
         <TextView
             android:id="@+id/tvFavEmptyState"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Tip: Long-click any app below on your controller to pin to Favorites."
+            android:layout_marginBottom="4dp"
+            android:text="Tip: Long-click any app on your controller to pin to Favorites."
             android:textColor="@color/text_secondary"
             android:textSize="11sp"
             android:visibility="gone"
-            app:layout_constraintTop_toBottomOf="@id/tvFavHeader"
+            app:layout_constraintBottom_toTopOf="@id/rvFavAppsShelf"
             app:layout_constraintStart_toStartOf="parent" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvFavAppsShelf"
             android:layout_width="match_parent"
-            android:layout_height="126dp"
-            android:layout_marginTop="4dp"
-            android:orientation="horizontal"
-            android:scrollbars="none"
-            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-            app:layout_constraintTop_toBottomOf="@id/tvFavEmptyState"
+            android:layout_height="145dp"
+            android:layout_marginBottom="4dp"
+            android:scrollbars="vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            tools:listitem="@layout/item_app_favorite_tv" />
+            tools:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            tools:spanCount="6"
+            tools:listitem="@layout/item_app_tv_banner" />
 
-        <!-- 📱 ALL APPLICATIONS SECTION -->
-        <TextView
-            android:id="@+id/tvAllAppsHeader"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="📱 ALL APPLICATIONS"
-            android:textColor="@color/text_secondary"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.08"
-            app:layout_constraintTop_toBottomOf="@id/rvFavAppsShelf"
-            app:layout_constraintStart_toStartOf="parent" />
-
-        <!-- App Search Bar -->
-        <EditText
-            android:id="@+id/etExtAppSearch"
-            android:layout_width="match_parent"
-            android:layout_height="34dp"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_rounded_search"
-            android:hint="Search apps..."
-            android:textColorHint="@color/text_secondary"
-            android:textColor="@color/text_primary"
-            android:textSize="12sp"
-            android:paddingHorizontal="14dp"
-            android:inputType="text"
-            android:maxLines="1"
-            android:imeOptions="actionSearch"
-            app:layout_constraintTop_toBottomOf="@id/tvAllAppsHeader"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
-
-        <!-- All Apps Grid -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvAppsGrid"
+        <!-- 📱 ALL APPLICATIONS OVERLAY DRAWER -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/layoutAllAppsOverlay"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginTop="6dp"
-            android:scrollbars="vertical"
-            app:layout_constraintTop_toBottomOf="@id/etExtAppSearch"
-            app:layout_constraintBottom_toBottomOf="parent"
-            tools:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
-            tools:spanCount="5"
-            tools:listitem="@layout/item_app_grid" />
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_glass_card"
+            android:padding="12dp"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/headerBar"
+            app:layout_constraintBottom_toBottomOf="parent">
+
+            <!-- Drawer Header -->
+            <RelativeLayout
+                android:id="@+id/allAppsDrawerHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <TextView
+                    android:id="@+id/tvAllAppsHeader"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:text="📱 ALL APPLICATIONS"
+                    android:textColor="@color/neon_cyan"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
+
+                <!-- Close Drawer Button -->
+                <TextView
+                    android:id="@+id/btnCloseAllApps"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:background="@drawable/bg_rounded_search"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="4dp"
+                    android:text="❌ CLOSE"
+                    android:textColor="@color/text_primary"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:clickable="true"
+                    android:focusable="true" />
+            </RelativeLayout>
+
+            <!-- App Search Bar (Solid White Background with Dark Text) -->
+            <EditText
+                android:id="@+id/etExtAppSearch"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_white_search_box"
+                android:hint="Search apps..."
+                android:textColorHint="#757575"
+                android:textColor="#121212"
+                android:textSize="12sp"
+                android:paddingHorizontal="14dp"
+                android:inputType="text"
+                android:maxLines="1"
+                android:imeOptions="actionSearch"
+                app:layout_constraintTop_toBottomOf="@id/allAppsDrawerHeader"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+            <!-- All Apps Grid -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvAppsGrid"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="8dp"
+                android:scrollbars="vertical"
+                app:layout_constraintTop_toBottomOf="@id/etExtAppSearch"
+                app:layout_constraintBottom_toBottomOf="parent"
+                tools:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+                tools:spanCount="5"
+                tools:listitem="@layout/item_app_tv_banner" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

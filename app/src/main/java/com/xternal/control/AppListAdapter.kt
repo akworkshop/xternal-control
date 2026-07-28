@@ -28,8 +28,30 @@ class AppListAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val app = apps[position]
-        holder.tvAppName.text = app.label
-        holder.ivAppIcon.setImageDrawable(app.icon)
+        
+        val ivBanner: ImageView? = holder.itemView.findViewById(R.id.ivBanner)
+        val layoutFallbackContent: View? = holder.itemView.findViewById(R.id.layoutFallbackContent)
+        val cardTvBanner: androidx.cardview.widget.CardView? = holder.itemView as? androidx.cardview.widget.CardView
+
+        if (ivBanner != null && layoutFallbackContent != null) {
+            if (app.banner != null) {
+                ivBanner.setImageDrawable(app.banner)
+                ivBanner.visibility = View.VISIBLE
+                layoutFallbackContent.visibility = View.GONE
+                cardTvBanner?.setCardBackgroundColor(0xFF0C0D12.toInt())
+            } else {
+                ivBanner.visibility = View.GONE
+                layoutFallbackContent.visibility = View.VISIBLE
+                holder.tvAppName.text = app.label
+                holder.ivAppIcon.setImageDrawable(app.icon)
+
+                val cardColor = app.dominantColor ?: 0xFF1C202E.toInt()
+                cardTvBanner?.setCardBackgroundColor(cardColor)
+            }
+        } else {
+            holder.tvAppName.text = app.label
+            holder.ivAppIcon.setImageDrawable(app.icon)
+        }
         
         if (app.isLocked) {
             holder.itemView.alpha = 0.4f
