@@ -435,6 +435,26 @@ class ExternalActivity : AppCompatActivity() {
             injectTouchEvent(cursorX, cursorY)
         }
 
+        // 2.5. Long Click Listener
+        InteractionBridge.longClickListener = {
+            // Ripple visual effect at cursor touch coordinate
+            viewCursorRipple.x = cursorX - dpToPx(20)
+            viewCursorRipple.y = cursorY - dpToPx(20)
+            viewCursorRipple.alpha = 0.8f
+            viewCursorRipple.animate()
+                .alpha(0f)
+                .scaleX(1.5f)
+                .scaleY(1.5f)
+                .setDuration(200)
+                .withEndAction {
+                    viewCursorRipple.scaleX = 1f
+                    viewCursorRipple.scaleY = 1f
+                }
+                .start()
+
+            injectLongTouchEvent(cursorX, cursorY)
+        }
+
         // 3. Right Click Listener
         InteractionBridge.rightClickListener = {
             cvContextMenu.x = cursorX.coerceAtMost(screenWidth - cvContextMenu.width)
@@ -596,6 +616,35 @@ class ExternalActivity : AppCompatActivity() {
 
     private fun updateMapZoomText() {
         tvMapCoords.text = "SATELLITE POSITION: SECTOR 4-B\nZoom Level: ${String.format("%.1fx", mapZoomLevel)}"
+    }
+
+    private fun findViewAt(view: View, x: Float, y: Float): View? {
+        if (view.visibility != View.VISIBLE) return null
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        val rx = x - location[0]
+        val ry = y - location[1]
+        if (rx < 0 || rx > view.width || ry < 0 || ry > view.height) return null
+        if (view is android.view.ViewGroup) {
+            for (i in view.childCount - 1 downTo 0) {
+                val child = view.getChildAt(i)
+                val found = findViewAt(child, x, y)
+                if (found != null) return found
+            }
+        }
+        return view
+    }
+
+    private fun injectLongTouchEvent(x: Float, y: Float) {
+        var view = findViewAt(rootContainer, x, y)
+        while (view != null) {
+            if (view.isLongClickable || view.hasOnClickListeners()) {
+                if (view.performLongClick()) {
+                    break
+                }
+            }
+            view = view.parent as? View
+        }
     }
 
     private fun injectTouchEvent(x: Float, y: Float) {

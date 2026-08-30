@@ -116,6 +116,23 @@ class MainActivity : AppCompatActivity() {
     private val cursorHideRunnable = Runnable { hideOverlayCursor() }
     private lateinit var pickWallpaperLauncher: ActivityResultLauncher<String>
 
+    // Bluetooth Mouse & Trackpad Long-Press States
+    private var lastMouseX = 0f
+    private var lastMouseY = 0f
+    private var isFirstMouseHover = true
+    private val trackpadHandler = Handler(Looper.getMainLooper())
+    private val longPressRunnable = Runnable {
+        cvTrackpad.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        hasDraggedOrScrolled = true
+        InteractionBridge.sendLongClick()
+        
+        // Also if simulating or overlay cursor is active, trigger accessibility long click
+        val service = ControllerAccessibilityService.instance
+        if (externalDisplayId != -1 && service != null) {
+            service.dispatchLongClick(externalDisplayId, overlayCursorX, overlayCursorY)
+        }
+    }
+
     // Simulated Glasses UI Views (when simulation mode is ON)
     private var simCursorX = 500f
     private var simCursorY = 300f
@@ -398,7 +415,81 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Hide physical mouse cursor on the phone screen
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            findViewById<View>(android.R.id.content)?.pointerIcon = 
+                android.view.PointerIcon.getSystemIcon(this, android.view.PointerIcon.TYPE_NULL)
+        }
+    }
 
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (event.isFromSource(android.view.InputDevice.SOURCE_MOUSE)) {
+            val action = event.actionMasked
+            if (action == MotionEvent.ACTION_HOVER_MOVE || action == MotionEvent.ACTION_HOVER_ENTER) {
+                val x = event.x
+                val y = event.y
+                if (!isFirstMouseHover) {
+                    val dx = (x - lastMouseX) * 1.5f
+                    val dy = (y - lastMouseY) * 1.5f
+                    
+                    cursorHideHandler.removeCallbacks(cursorHideRunnable)
+                    showOverlayCursor()
+
+                    InteractionBridge.sendCursorMove(dx, dy)
+                    updateOverlayCursor(dx, dy)
+                    if (isSimulating) moveSimulatedCursor(dx, dy)
+                } else {
+                    isFirstMouseHover = false
+                }
+                lastMouseX = x
+                lastMouseY = y
+                return true
+            } else if (action == MotionEvent.ACTION_SCROLL) {
+                val vScroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
+                if (vScroll != 0f) {
+                    val scrollDy = -vScroll * 120f
+                    
+                    cursorHideHandler.removeCallbacks(cursorHideRunnable)
+                    showOverlayCursor()
+
+                    InteractionBridge.sendScroll(scrollDy)
+                    if (isSimulating) handleSimulatedScroll(scrollDy)
+                    
+                    val service = ControllerAccessibilityService.instance
+                    if (externalDisplayId != -1 && service != null) {
+                        val endY = (overlayCursorY - scrollDy).coerceIn(0f, externalDisplayHeight.toFloat())
+                        service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
+                    }
+                }
+                return true
+            }
+        }
+        return super.dispatchGenericMotionEvent(event)
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.isFromSource(android.view.InputDevice.SOURCE_MOUSE)) {
+            val action = event.actionMasked
+            when (action) {
+                MotionEvent.ACTION_DOWN -> {
+                    downTime = System.currentTimeMillis()
+                }
+                MotionEvent.ACTION_UP -> {
+                    val duration = System.currentTimeMillis() - downTime
+                    if (duration >= 500) {
+                        InteractionBridge.sendLongClick()
+                        val service = ControllerAccessibilityService.instance
+                        if (externalDisplayId != -1 && service != null) {
+                            service.dispatchLongClick(externalDisplayId, overlayCursorX, overlayCursorY)
+                        }
+                    } else {
+                        performLeftClick()
+                    }
+                }
+            }
+            return true
+        }
+        return super.dispatchTouchEvent(event)
     }
 
     private fun checkPermissions() {
@@ -748,10 +839,15 @@ class MainActivity : AppCompatActivity() {
                     viewCursorMirror.visibility = View.VISIBLE
                     viewCursorMirror.x = x
                     viewCursorMirror.y = y
+
+                    // Queue long press check
+                    trackpadHandler.removeCallbacks(longPressRunnable)
+                    trackpadHandler.postDelayed(longPressRunnable, 600)
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     isMultiTouch = true
                     hasDraggedOrScrolled = true
+                    trackpadHandler.removeCallbacks(longPressRunnable)
                     if (event.pointerCount >= 2) {
                         accumulatedScrollDx = 0f
                         accumulatedScrollDy = 0f
@@ -762,6 +858,7 @@ class MainActivity : AppCompatActivity() {
                     val totalMoved = Math.hypot((x - startX).toDouble(), (y - startY).toDouble())
                     if (totalMoved > 10) {
                         hasDraggedOrScrolled = true
+                        trackpadHandler.removeCallbacks(longPressRunnable)
                     }
                     if (isMultiTouch && event.pointerCount >= 2) {
                         // Two-finger scroll drag
@@ -809,6 +906,7 @@ class MainActivity : AppCompatActivity() {
                     lastY = y
                 }
                 MotionEvent.ACTION_UP -> {
+                    trackpadHandler.removeCallbacks(longPressRunnable)
                     viewCursorMirror.visibility = View.GONE
                     val duration = System.currentTimeMillis() - downTime
                     

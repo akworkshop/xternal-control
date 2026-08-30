@@ -69,6 +69,25 @@ class ControllerAccessibilityService : AccessibilityService() {
         }
     }
 
+    fun dispatchLongClick(displayId: Int, x: Float, y: Float): Boolean {
+        val clickPath = Path().apply {
+            moveTo(x, y)
+        }
+        val stroke = GestureDescription.StrokeDescription(clickPath, 0, 800)
+        val builder = GestureDescription.Builder().apply {
+            addStroke(stroke)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                setDisplayId(displayId)
+            }
+        }
+        return try {
+            dispatchGesture(builder.build(), null, null)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
     fun dispatchScroll(displayId: Int, startX: Float, startY: Float, endX: Float, endY: Float): Boolean {
         val swipePath = Path().apply {
             moveTo(startX, startY)

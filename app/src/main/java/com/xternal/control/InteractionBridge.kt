@@ -8,6 +8,7 @@ object InteractionBridge {
 
     var cursorMoveListener: ((Float, Float) -> Unit)? = null
     var clickListener: (() -> Unit)? = null
+    var longClickListener: (() -> Unit)? = null
     var rightClickListener: (() -> Unit)? = null
     var scrollListener: ((Float) -> Unit)? = null
     var textInputListener: ((String) -> Unit)? = null
@@ -22,6 +23,10 @@ object InteractionBridge {
 
     fun sendClick() {
         runOnMain { clickListener?.invoke() }
+    }
+
+    fun sendLongClick() {
+        runOnMain { longClickListener?.invoke() }
     }
 
     fun sendRightClick() {
