@@ -1,17 +1,30 @@
 package com.xternal.control
 
 import android.app.ActivityOptions
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.media.AudioManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.Uri
+import android.os.BatteryManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
+import android.provider.MediaStore
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -20,59 +33,81 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import java.io.File
+import java.text.SimpleDateFormat
 import java.util.ArrayList
+import java.util.Date
+import java.util.Locale
 
 class ExternalActivity : AppCompatActivity() {
 
-    // UI elements
+    // Root Containers
     private lateinit var rootContainer: FrameLayout
     private lateinit var launcherContainer: View
-    private lateinit var rvAppsGrid: RecyclerView
-    private lateinit var ivCursor: ImageView
-    private lateinit var viewCursorRipple: View
+    private lateinit var ivExtBackground: ImageView
+
+    // Desktop Elements (Windows Style)
+    private lateinit var rvDesktopIcons: RecyclerView
+    private lateinit var desktopAdapter: DesktopIconsAdapter
+    private lateinit var cardDesktopSupport: View
+    private lateinit var btnBuyMeCoffee: View
+
+    // Start Menu Elements
+    private lateinit var layoutStartMenu: View
+    private lateinit var etStartMenuSearch: EditText
+    private lateinit var rvStartMenuApps: RecyclerView
+    private lateinit var startMenuAdapter: StartMenuAppsAdapter
+    private lateinit var btnStartGuide: View
+    private lateinit var btnCloseStartMenu: View
+
+    // Taskbar Elements
+    private lateinit var layoutTaskbar: View
+    private lateinit var btnStartMenu: View
+    private lateinit var rvTaskbarApps: RecyclerView
+    private lateinit var taskbarAdapter: TaskbarAppsAdapter
+
+    // System Tray Elements
+    private lateinit var tvBatteryPercent: TextView
+    private lateinit var tvTrayTime: TextView
+    private lateinit var tvTrayDate: TextView
+
+    // Interactive Demo / Simulated Apps
     private lateinit var virtualAppContainer: View
     private lateinit var layoutBrowserApp: View
     private lateinit var layoutNotesApp: View
     private lateinit var etNotesArea: EditText
+    private lateinit var layoutMapApp: View
+    private lateinit var tvMapCoords: TextView
+    private lateinit var cvExtNavBar: View
+    private var mapZoomLevel = 1.0f
+
+    // Cursor & Context Menu
+    private lateinit var ivCursor: ImageView
+    private lateinit var viewCursorRipple: View
     private lateinit var cvContextMenu: CardView
 
-    // Data
+    // Data Lists
     private var allApps: List<AppInfo> = ArrayList()
-    private lateinit var gridAdapter: AppListAdapter
     private var recentPackages: ArrayList<String> = ArrayList()
     private var favouritePackages: ArrayList<String> = ArrayList()
     private var sharedPrefsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var appSearchQuery: String = ""
-    
+
     // Bounds & coordinates
     private var screenWidth = 1920f
     private var screenHeight = 1080f
     private var cursorX = 960f
     private var cursorY = 540f
     private var isPipMode = false
-    
-    // Additional views
-    private lateinit var layoutMapApp: View
-    private lateinit var tvMapCoords: TextView
-    private lateinit var cvExtNavBar: View
-    private var mapZoomLevel = 1.0f
 
-    // Flauncher UI & Custom Wallpaper Elements
-    private lateinit var ivExtBackground: ImageView
-    private lateinit var tvClock: TextView
-    private lateinit var tvDate: TextView
-    private lateinit var rvFavAppsShelf: RecyclerView
-    private lateinit var tvFavEmptyState: TextView
-    private lateinit var favAdapter: FavAppsAdapter
-    private lateinit var layoutAllAppsOverlay: View
-    private lateinit var btnCloseAllApps: View
-
-    private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val clockRunnable = object : Runnable {
+    // System Tray Tick Handler
+    private val systemTrayHandler = Handler(Looper.getMainLooper())
+    private val systemTrayRunnable = object : Runnable {
         override fun run() {
-            updateClock()
-            clockHandler.postDelayed(this, 1000)
+            updateSystemTrayStatus()
+            systemTrayHandler.postDelayed(this, 1000)
         }
     }
 
@@ -91,67 +126,73 @@ class ExternalActivity : AppCompatActivity() {
     override fun onDestroy() {
         val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
         sharedPrefsListener?.let { prefs.unregisterOnSharedPreferenceChangeListener(it) }
+        systemTrayHandler.removeCallbacks(systemTrayRunnable)
         super.onDestroy()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (isPipMode) {
+            closeVirtualApps()
+            launcherContainer.visibility = View.GONE
+            ivExtBackground.visibility = View.GONE
+            rootContainer.setBackgroundColor(Color.BLACK)
+        } else {
+            returnToDesktop()
+        }
+        systemTrayHandler.post(systemTrayRunnable)
+        loadListsFromPreferences()
+        sortAndRefreshAppLists()
+        if (!isPipMode) {
+            applyBackgroundTheme()
+        }
+    }
 
+    override fun onPause() {
+        systemTrayHandler.removeCallbacks(systemTrayRunnable)
+        super.onPause()
+    }
 
     private fun initViews() {
         rootContainer = findViewById(R.id.rootContainer)
         launcherContainer = findViewById(R.id.launcherContainer)
-        rvAppsGrid = findViewById(R.id.rvAppsGrid)
-        ivCursor = findViewById(R.id.ivCursor)
-        viewCursorRipple = findViewById(R.id.viewCursorRipple)
-        virtualAppContainer = findViewById(R.id.virtualAppContainer)
-        layoutBrowserApp = findViewById(R.id.layoutBrowserApp)
-        layoutNotesApp = findViewById(R.id.layoutNotesApp)
-        etNotesArea = findViewById(R.id.etNotesArea)
-        cvContextMenu = findViewById(R.id.cvContextMenu)
-        layoutMapApp = findViewById(R.id.layoutMapApp)
-        tvMapCoords = findViewById(R.id.tvMapCoords)
-        cvExtNavBar = findViewById(R.id.cvExtNavBar)
-
         ivExtBackground = findViewById(R.id.ivExtBackground)
-        tvClock = findViewById(R.id.tvClock)
-        tvDate = findViewById(R.id.tvDate)
-        rvFavAppsShelf = findViewById(R.id.rvFavAppsShelf)
-        tvFavEmptyState = findViewById(R.id.tvFavEmptyState)
-        layoutAllAppsOverlay = findViewById(R.id.layoutAllAppsOverlay)
-        btnCloseAllApps = findViewById(R.id.btnCloseAllApps)
-        btnCloseAllApps.setOnClickListener {
-            layoutAllAppsOverlay.visibility = View.GONE
+
+        // Desktop
+        rvDesktopIcons = findViewById(R.id.rvDesktopIcons)
+        cardDesktopSupport = findViewById(R.id.cardDesktopSupport)
+        btnBuyMeCoffee = findViewById(R.id.btnBuyMeCoffee)
+
+        if (BuildConfig.FLAVOR == "github") {
+            cardDesktopSupport.visibility = View.VISIBLE
+            btnBuyMeCoffee.setOnClickListener {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/akworkshop"))
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        } else {
+            cardDesktopSupport.visibility = View.GONE
         }
 
-        val btnInfoGuide = findViewById<View>(R.id.btnInfoGuide)
-        btnInfoGuide?.setOnClickListener {
+        // Start Menu
+        layoutStartMenu = findViewById(R.id.layoutStartMenu)
+        etStartMenuSearch = findViewById(R.id.etStartMenuSearch)
+        rvStartMenuApps = findViewById(R.id.rvStartMenuApps)
+        btnStartGuide = findViewById(R.id.btnStartGuide)
+        btnCloseStartMenu = findViewById(R.id.btnCloseStartMenu)
+
+        btnStartGuide.setOnClickListener {
+            layoutStartMenu.visibility = View.GONE
             showGuideDialog()
         }
-
-        val cardAllAppsBanner = findViewById<View>(R.id.cardAllAppsBanner)
-        cardAllAppsBanner?.setOnClickListener {
-            layoutAllAppsOverlay.visibility = View.VISIBLE
+        btnCloseStartMenu.setOnClickListener {
+            layoutStartMenu.visibility = View.GONE
         }
 
-        val cardSupportBanner = findViewById<View>(R.id.cardSupportBanner)
-        if (cardSupportBanner != null) {
-            if (BuildConfig.FLAVOR == "github") {
-                cardSupportBanner.visibility = View.VISIBLE
-                val btnBuyMeCoffee = findViewById<View>(R.id.btnBuyMeCoffee)
-                btnBuyMeCoffee?.setOnClickListener {
-                    try {
-                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://buymeacoffee.com/akworkshop"))
-                        startActivity(intent)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            } else {
-                cardSupportBanner.visibility = View.GONE
-            }
-        }
-
-        val etExtAppSearch = findViewById<EditText>(R.id.etExtAppSearch)
-        etExtAppSearch.addTextChangedListener(object : TextWatcher {
+        etStartMenuSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 appSearchQuery = s?.toString() ?: ""
@@ -160,13 +201,39 @@ class ExternalActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
+        // Taskbar
+        layoutTaskbar = findViewById(R.id.layoutTaskbar)
+        btnStartMenu = findViewById(R.id.btnStartMenu)
+        rvTaskbarApps = findViewById(R.id.rvTaskbarApps)
+
+        btnStartMenu.setOnClickListener {
+            toggleStartMenu()
+        }
+
+        // System Tray
+        tvBatteryPercent = findViewById(R.id.tvBatteryPercent)
+        tvTrayTime = findViewById(R.id.tvTrayTime)
+        tvTrayDate = findViewById(R.id.tvTrayDate)
+
+        // Simulated Apps & Overlays
+        virtualAppContainer = findViewById(R.id.virtualAppContainer)
+        layoutBrowserApp = findViewById(R.id.layoutBrowserApp)
+        layoutNotesApp = findViewById(R.id.layoutNotesApp)
+        etNotesArea = findViewById(R.id.etNotesArea)
+        layoutMapApp = findViewById(R.id.layoutMapApp)
+        tvMapCoords = findViewById(R.id.tvMapCoords)
+        cvExtNavBar = findViewById(R.id.cvExtNavBar)
+
+        ivCursor = findViewById(R.id.ivCursor)
+        viewCursorRipple = findViewById(R.id.viewCursorRipple)
+        cvContextMenu = findViewById(R.id.cvContextMenu)
+
         // Capture display dimensions once loaded & detect real hardware resolution
         rootContainer.post {
             screenWidth = rootContainer.width.toFloat()
             screenHeight = rootContainer.height.toFloat()
             cursorX = screenWidth / 2f
             cursorY = screenHeight / 2f
-            
             ivCursor.visibility = View.GONE
 
             val tvExtHeader = findViewById<TextView>(R.id.tvExtHeader)
@@ -194,43 +261,45 @@ class ExternalActivity : AppCompatActivity() {
             }
         }
 
-        // Click listeners for simulated app Close buttons
-        findViewById<View>(R.id.btnBrowserClose).setOnClickListener {
-            closeVirtualApps()
-        }
-        findViewById<View>(R.id.btnNotesClose).setOnClickListener {
-            closeVirtualApps()
-        }
-        findViewById<View>(R.id.btnMapClose).setOnClickListener {
-            closeVirtualApps()
-        }
+        // Simulated App Close Buttons
+        findViewById<View>(R.id.btnBrowserClose).setOnClickListener { closeVirtualApps() }
+        findViewById<View>(R.id.btnNotesClose).setOnClickListener { closeVirtualApps() }
+        findViewById<View>(R.id.btnMapClose).setOnClickListener { closeVirtualApps() }
 
-        // Map Zoom Button Clicks
-        findViewById<View>(R.id.btnMapZoomIn).setOnClickListener {
-            mapZoomLevel = (mapZoomLevel + 0.2f).coerceAtMost(3.0f)
-            updateMapZoomText()
-        }
-        findViewById<View>(R.id.btnMapZoomOut).setOnClickListener {
-            mapZoomLevel = (mapZoomLevel - 0.2f).coerceAtLeast(0.5f)
-            updateMapZoomText()
-        }
+        findViewById<View>(R.id.btnExtNavBack).setOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        findViewById<View>(R.id.btnExtNavHome).setOnClickListener { returnToDesktop() }
 
-        // Navigation Pill Clicks
-        findViewById<View>(R.id.btnExtNavBack).setOnClickListener {
-            closeVirtualApps()
-        }
-        findViewById<View>(R.id.btnExtNavHome).setOnClickListener {
-            closeVirtualApps()
-        }
-
-        // Context Menu Item Click listeners
         findViewById<View>(R.id.tvContextBack).setOnClickListener {
             cvContextMenu.visibility = View.GONE
-            closeVirtualApps()
+            onBackPressedDispatcher.onBackPressed()
         }
         findViewById<View>(R.id.tvContextHome).setOnClickListener {
             cvContextMenu.visibility = View.GONE
-            closeVirtualApps()
+            returnToDesktop()
+        }
+    }
+
+    private fun toggleStartMenu() {
+        layoutStartMenu.visibility = if (layoutStartMenu.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+    }
+
+    private fun updateSystemTrayStatus() {
+        try {
+            // Time and Date
+            val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+            val dateFormat = SimpleDateFormat("M/d/yyyy", Locale.getDefault())
+            val now = Date()
+            tvTrayTime.text = timeFormat.format(now)
+            tvTrayDate.text = dateFormat.format(now)
+
+            // Battery Status
+            val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            val batteryPct = if (level != -1 && scale != -1) (level * 100 / scale.toFloat()).toInt() else 100
+            tvBatteryPercent.text = "🔋 $batteryPct%"
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -240,176 +309,164 @@ class ExternalActivity : AppCompatActivity() {
             addCategory(Intent.CATEGORY_LAUNCHER)
         }
         val resolveInfos = pm.queryIntentActivities(mainIntent, 0)
-        
-        val apps = ArrayList<AppInfo>()
+
+        val appList = ArrayList<AppInfo>()
         for (info in resolveInfos) {
-            if (info.activityInfo.packageName == packageName) continue
-            val bannerDrawable = info.activityInfo.loadBanner(pm)
-                ?: info.activityInfo.applicationInfo.loadBanner(pm)
-            val iconDrawable = info.loadIcon(pm)
-            val domColor = if (bannerDrawable == null) extractDominantColor(iconDrawable) else null
+            val pkg = info.activityInfo.packageName
+            if (pkg == packageName) continue
 
-            val appInfo = AppInfo(
-                label = info.loadLabel(pm).toString(),
-                packageName = info.activityInfo.packageName,
-                icon = iconDrawable,
-                banner = bannerDrawable,
-                dominantColor = domColor
+            val label = info.loadLabel(pm).toString()
+            val icon = info.loadIcon(pm)
+            val isFav = favouritePackages.contains(pkg)
+
+            appList.add(
+                AppInfo(
+                    packageName = pkg,
+                    label = label,
+                    icon = icon,
+                    isFavourite = isFav
+                )
             )
-            apps.add(appInfo)
         }
-        allApps = apps.distinctBy { it.packageName }
-        applyPlayStoreAppRestrictions()
 
-        // Setup Favorites Shelf Adapter
-        favAdapter = FavAppsAdapter(
+        allApps = appList
+
+        // 1. Desktop Icons Adapter: Arranges in columns from top to bottom, wrapping to multiple columns horizontally
+        desktopAdapter = DesktopIconsAdapter(
             apps = emptyList(),
-            onItemClick = { app ->
-                launchApp(app.packageName)
-            },
-            onItemLongClick = { app ->
-                toggleAppFavourite(app)
-            }
+            onItemClick = { app -> launchApp(app.packageName) },
+            onItemLongClick = { app -> toggleAppFavourite(app) }
         )
-        val metrics = resources.displayMetrics
-        val screenWidthDp = metrics.widthPixels / metrics.density
-        val calculatedSpan = (screenWidthDp / 200).toInt().coerceAtLeast(3)
+        rvDesktopIcons.layoutManager = GridLayoutManager(this, 5, RecyclerView.HORIZONTAL, false)
+        rvDesktopIcons.adapter = desktopAdapter
 
-        rvFavAppsShelf.layoutManager = GridLayoutManager(this, calculatedSpan)
-        rvFavAppsShelf.adapter = favAdapter
+        // 2. Taskbar Pinned Apps Adapter (Horizontal)
+        taskbarAdapter = TaskbarAppsAdapter(
+            apps = emptyList(),
+            onItemClick = { app -> launchApp(app.packageName) },
+            onItemLongClick = { app -> toggleAppFavourite(app) }
+        )
+        rvTaskbarApps.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        rvTaskbarApps.adapter = taskbarAdapter
 
-        // External launcher uses a dynamic grid layout for wide TV banners
-        gridAdapter = AppListAdapter(
+        // 3. Start Menu Apps Adapter (Vertical list)
+        startMenuAdapter = StartMenuAppsAdapter(
             apps = allApps,
-            isGridLayout = true,
             onItemClick = { app ->
-                layoutAllAppsOverlay.visibility = View.GONE
+                layoutStartMenu.visibility = View.GONE
                 launchApp(app.packageName)
             },
-            onItemLongClick = { app ->
-                toggleAppFavourite(app)
-            }
+            onItemLongClick = { app -> toggleAppFavourite(app) }
         )
-        rvAppsGrid.layoutManager = GridLayoutManager(this, calculatedSpan)
-        rvAppsGrid.adapter = gridAdapter
+        rvStartMenuApps.layoutManager = LinearLayoutManager(this)
+        rvStartMenuApps.adapter = startMenuAdapter
+
         sortAndRefreshAppLists()
     }
 
-    private fun loadListsFromPreferences() {
-        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
-        
-        val recentsStr = prefs.getString("recent_packages", "") ?: ""
-        recentPackages.clear()
-        if (recentsStr.isNotEmpty()) {
-            recentPackages.addAll(recentsStr.split(","))
-        }
-        
-        val favsStr = prefs.getString("favourite_packages", "") ?: ""
-        favouritePackages.clear()
-        if (favsStr.isNotEmpty()) {
-            favouritePackages.addAll(favsStr.split(","))
-        }
-    }
-
     private fun sortAndRefreshAppLists() {
-        // Filter apps based on search query
-        val filteredApps = if (appSearchQuery.isEmpty()) {
-            allApps
+        val updatedApps = allApps.map { app ->
+            app.copy(isFavourite = favouritePackages.contains(app.packageName))
+        }
+        allApps = updatedApps
+
+        // Favorite Apps for Desktop and Taskbar
+        val favApps = allApps.filter { it.isFavourite }
+        desktopAdapter.updateData(favApps)
+        taskbarAdapter.updateData(favApps)
+
+        // Filtered apps for Start Menu
+        val filteredStartApps = if (appSearchQuery.isEmpty()) {
+            allApps.sortedBy { it.label.lowercase(Locale.getDefault()) }
         } else {
             allApps.filter { it.label.contains(appSearchQuery, ignoreCase = true) }
+                .sortedBy { it.label.lowercase(Locale.getDefault()) }
         }
-
-        // Set isFavourite status on filteredApps based on favouritePackages
-        for (app in filteredApps) {
-            app.isFavourite = favouritePackages.contains(app.packageName)
-        }
-
-        // Update Favorites Shelf
-        val favApps = allApps.filter { favouritePackages.contains(it.packageName) }
-
-        if (favApps.isEmpty()) {
-            tvFavEmptyState.visibility = View.VISIBLE
-        } else {
-            tvFavEmptyState.visibility = View.GONE
-        }
-
-        favAdapter.updateData(favApps)
-        rvFavAppsShelf.visibility = View.VISIBLE
-
-        // Re-sort the app list:
-        // 1. Unlocked trial apps first (Play Store flavor only)
-        // 2. Favourites next (sorted alphabetically by label)
-        // 3. Recents next (sorted by position in recentPackages list)
-        // 4. The rest alphabetically by label
-        val sortedApps = filteredApps.sortedWith(compareBy<AppInfo> { it.isLocked }
-            .thenByDescending { it.isFavourite }
-            .thenBy { app ->
-                val index = recentPackages.indexOf(app.packageName)
-                if (index != -1) index else Int.MAX_VALUE
-            }
-            .thenBy { it.label.lowercase() }
-        )
-
-        gridAdapter.updateData(sortedApps)
-    }
-
-    private fun saveListsToPreferences() {
-        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
-        val editor = prefs.edit()
-        
-        val recentsStr = recentPackages.joinToString(",")
-        editor.putString("recent_packages", recentsStr)
-        
-        val favsStr = favouritePackages.joinToString(",")
-        editor.putString("favourite_packages", favsStr)
-        
-        editor.apply()
+        startMenuAdapter.updateData(filteredStartApps)
     }
 
     private fun toggleAppFavourite(app: AppInfo) {
-        if (favouritePackages.contains(app.packageName)) {
-            favouritePackages.remove(app.packageName)
-            Toast.makeText(this, "${app.label} removed from Favourites", Toast.LENGTH_SHORT).show()
+        val pkg = app.packageName
+        if (favouritePackages.contains(pkg)) {
+            favouritePackages.remove(pkg)
+            Toast.makeText(this, "Unpinned from Desktop & Taskbar: ${app.label}", Toast.LENGTH_SHORT).show()
         } else {
-            if (BuildConfig.FLAVOR == "playstore" && favouritePackages.size >= 3) {
-                com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                    .setTitle("Pro Feature")
-                    .setMessage("Adding more than 3 favorite apps is a Pro feature.\n\nIn-app purchases are coming soon to unlock unlimited favorites!")
-                    .setPositiveButton("OK", null)
-                    .show()
-                return
-            }
-            favouritePackages.add(app.packageName)
-            Toast.makeText(this, "${app.label} added to Favourites", Toast.LENGTH_SHORT).show()
+            favouritePackages.add(pkg)
+            Toast.makeText(this, "Pinned to Desktop & Taskbar: ${app.label}", Toast.LENGTH_SHORT).show()
         }
         saveListsToPreferences()
         sortAndRefreshAppLists()
     }
 
-    private fun setupSharedPreferencesListener() {
-        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
-        sharedPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == "recent_packages" || key == "favourite_packages") {
-                loadListsFromPreferences()
-                sortAndRefreshAppLists()
-            } else if (key == "glasses_bg_type" || key == "glasses_bg_color" || key == "glasses_bg_updated") {
-                runOnUiThread { applyBackgroundTheme() }
+    private fun launchApp(packageName: String) {
+        layoutStartMenu.visibility = View.GONE
+
+        when (packageName) {
+            "mock.browser" -> {
+                closeVirtualApps(keepNavBar = true)
+                launcherContainer.visibility = View.GONE
+                ivExtBackground.visibility = View.GONE
+                rootContainer.setBackgroundColor(Color.BLACK)
+                virtualAppContainer.visibility = View.VISIBLE
+                layoutBrowserApp.visibility = View.VISIBLE
+                cvExtNavBar.visibility = View.VISIBLE
+            }
+            "mock.notes" -> {
+                closeVirtualApps(keepNavBar = true)
+                launcherContainer.visibility = View.GONE
+                ivExtBackground.visibility = View.GONE
+                rootContainer.setBackgroundColor(Color.BLACK)
+                virtualAppContainer.visibility = View.VISIBLE
+                layoutNotesApp.visibility = View.VISIBLE
+                cvExtNavBar.visibility = View.VISIBLE
+            }
+            "mock.map" -> {
+                closeVirtualApps(keepNavBar = true)
+                launcherContainer.visibility = View.GONE
+                ivExtBackground.visibility = View.GONE
+                rootContainer.setBackgroundColor(Color.BLACK)
+                virtualAppContainer.visibility = View.VISIBLE
+                layoutMapApp.visibility = View.VISIBLE
+                cvExtNavBar.visibility = View.VISIBLE
+            }
+            else -> {
+                val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+                if (launchIntent != null) {
+                    try {
+                        val options = ActivityOptions.makeBasic()
+                        val currentDisplay = window?.decorView?.display
+                        val displayId = currentDisplay?.displayId ?: -1
+                        if (currentDisplay != null) {
+                            options.launchDisplayId = displayId
+                        }
+                        startActivity(launchIntent, options.toBundle())
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        startActivity(launchIntent)
+                    }
+                } else {
+                    Toast.makeText(this, "App not found or cannot launch directly", Toast.LENGTH_SHORT).show()
+                }
             }
         }
-        prefs.registerOnSharedPreferenceChangeListener(sharedPrefsListener)
+    }
+
+    private fun returnToDesktop() {
+        closeVirtualApps()
+        layoutStartMenu.visibility = View.GONE
+
+        launcherContainer.visibility = View.VISIBLE
+        applyBackgroundTheme()
     }
 
     private fun setupInteractionBridge() {
-        // 1. Move Cursor Listener
         InteractionBridge.cursorMoveListener = { dx, dy ->
             val scaleFactor = 1.5f
             cursorX = (cursorX + dx * scaleFactor).coerceIn(0f, screenWidth)
             cursorY = (cursorY + dy * scaleFactor).coerceIn(0f, screenHeight)
         }
 
-        // 2. Click/Tap Listener
         InteractionBridge.clickListener = {
-            // Ripple visual effect at cursor touch coordinate
             viewCursorRipple.x = cursorX - dpToPx(20)
             viewCursorRipple.y = cursorY - dpToPx(20)
             viewCursorRipple.alpha = 0.8f
@@ -424,20 +481,16 @@ class ExternalActivity : AppCompatActivity() {
                 }
                 .start()
 
-            // Handle Context Menu dismissal
             if (cvContextMenu.visibility == View.VISIBLE) {
                 if (!isPointInsideView(cursorX, cursorY, cvContextMenu)) {
                     cvContextMenu.visibility = View.GONE
                 }
             }
 
-            // Synthesize Touch Event at cursor coordinate
             injectTouchEvent(cursorX, cursorY)
         }
 
-        // 2.5. Long Click Listener
         InteractionBridge.longClickListener = {
-            // Ripple visual effect at cursor touch coordinate
             viewCursorRipple.x = cursorX - dpToPx(20)
             viewCursorRipple.y = cursorY - dpToPx(20)
             viewCursorRipple.alpha = 0.8f
@@ -455,135 +508,170 @@ class ExternalActivity : AppCompatActivity() {
             injectLongTouchEvent(cursorX, cursorY)
         }
 
-        // 3. Right Click Listener
         InteractionBridge.rightClickListener = {
             cvContextMenu.x = cursorX.coerceAtMost(screenWidth - cvContextMenu.width)
             cvContextMenu.y = cursorY.coerceAtMost(screenHeight - cvContextMenu.height)
             cvContextMenu.visibility = View.VISIBLE
         }
 
-        // 4. Two-finger Scroll Listener
         InteractionBridge.scrollListener = { scrollDy ->
             if (layoutBrowserApp.visibility == View.VISIBLE) {
                 val scroller = findViewById<View>(R.id.browserScrollView)
                 scroller.scrollBy(0, -scrollDy.toInt())
-            } else if (launcherContainer.visibility == View.VISIBLE) {
-                rvAppsGrid.scrollBy(0, -scrollDy.toInt())
+            } else if (layoutStartMenu.visibility == View.VISIBLE) {
+                rvStartMenuApps.scrollBy(0, -scrollDy.toInt())
             }
         }
 
-        // 5. Keyboard Search Input Sync Listener
         InteractionBridge.textInputListener = { text ->
-            // Mirror text directly to active notepad if open
             if (layoutNotesApp.visibility == View.VISIBLE) {
-                etNotesArea.setText(text)
-                etNotesArea.setSelection(text.length)
+                etNotesArea.append(text)
+            } else if (layoutStartMenu.visibility == View.VISIBLE) {
+                etStartMenuSearch.append(text)
             }
         }
 
-        // 6. Remote App Launch trigger
         InteractionBridge.appLaunchListener = { packageName ->
             launchApp(packageName)
         }
 
-        // 7. Zoom Listener for Map zoom controls
         InteractionBridge.zoomListener = { isZoomIn ->
             if (layoutMapApp.visibility == View.VISIBLE) {
                 if (isZoomIn) {
-                    mapZoomLevel = (mapZoomLevel + 0.2f).coerceAtMost(3.0f)
+                    mapZoomLevel = (mapZoomLevel + 0.2f).coerceAtMost(4.0f)
                 } else {
                     mapZoomLevel = (mapZoomLevel - 0.2f).coerceAtLeast(0.5f)
                 }
+                val ivMap = findViewById<View>(R.id.ivMapImage)
+                ivMap.scaleX = mapZoomLevel
+                ivMap.scaleY = mapZoomLevel
                 updateMapZoomText()
             }
         }
 
-        // 8. PiP Mode Listener
         InteractionBridge.pipModeListener = { enabled ->
             isPipMode = enabled
-            runOnUiThread {
-                if (enabled) {
-                    ivExtBackground.visibility = View.GONE
-                    rootContainer.setBackgroundColor(android.graphics.Color.BLACK)
-                    launcherContainer.visibility = View.INVISIBLE
-                    virtualAppContainer.visibility = View.INVISIBLE
-                } else {
-                    if (layoutBrowserApp.visibility == View.VISIBLE || 
-                        layoutNotesApp.visibility == View.VISIBLE || 
-                        layoutMapApp.visibility == View.VISIBLE) {
-                        ivExtBackground.visibility = View.GONE
-                        rootContainer.setBackgroundColor(android.graphics.Color.BLACK)
-                        virtualAppContainer.visibility = View.VISIBLE
-                        launcherContainer.visibility = View.GONE
-                    } else {
-                        launcherContainer.visibility = View.VISIBLE
-                        virtualAppContainer.visibility = View.GONE
-                        applyBackgroundTheme()
-                    }
-                }
+            if (enabled) {
+                launcherContainer.visibility = View.GONE
+                ivExtBackground.visibility = View.GONE
+                rootContainer.setBackgroundColor(Color.BLACK)
+            } else {
+                launcherContainer.visibility = View.VISIBLE
+                applyBackgroundTheme()
             }
         }
-    }
 
-    private fun filterApps(query: String) {
-        val filtered = allApps.filter { it.label.contains(query, ignoreCase = true) }
-        gridAdapter.updateData(filtered)
-    }
-
-    private fun launchApp(packageName: String) {
-        val app = allApps.find { it.packageName == packageName }
-        if (app != null && app.isLocked) {
-            showProUpgradeDialog()
-            return
+        InteractionBridge.screenshotRequestListener = {
+            captureScreenToGallery()
         }
-        // Turn background to pure OLED black during app usage to avoid wallpaper bleed-through
-        ivExtBackground.visibility = View.GONE
-        rootContainer.setBackgroundColor(android.graphics.Color.BLACK)
 
-        // Track recents: move to start
-        recentPackages.remove(packageName)
-        recentPackages.add(0, packageName)
-        saveListsToPreferences()
-        sortAndRefreshAppLists()
+        InteractionBridge.homeRequestListener = {
+            returnToDesktop()
+        }
+    }
 
-        val pm = packageManager
-        val launchIntent = pm.getLaunchIntentForPackage(packageName)
-        if (launchIntent != null) {
-            try {
-                val options = ActivityOptions.makeBasic()
-                val displayId = window?.decorView?.display?.displayId ?: -1
-                options.launchDisplayId = displayId
-                startActivity(launchIntent, options.toBundle())
-                Toast.makeText(this, "Launching real app: $packageName", Toast.LENGTH_SHORT).show()
-            } catch (e: SecurityException) {
-                Toast.makeText(this, "Security restriction: Cannot launch this app on secondary display", Toast.LENGTH_LONG).show()
-                e.printStackTrace()
-            } catch (e: Exception) {
-                Toast.makeText(this, "Failed to launch app: ${e.message}", Toast.LENGTH_LONG).show()
-                e.printStackTrace()
+    private fun captureScreenToGallery() {
+        try {
+            val width = if (rootContainer.width > 0) rootContainer.width else (screenWidth.toInt().takeIf { it > 0 } ?: 1920)
+            val height = if (rootContainer.height > 0) rootContainer.height else (screenHeight.toInt().takeIf { it > 0 } ?: 1080)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+
+            // Draw full view hierarchy directly onto software canvas
+            rootContainer.draw(canvas)
+            saveBitmapToGallery(bitmap)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Screenshot error: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun saveBitmapToGallery(bitmap: Bitmap) {
+        try {
+            val filename = "Xternal_Screenshot_${System.currentTimeMillis()}.png"
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/XternalControl")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            }
+
+            val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            if (uri != null) {
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    contentValues.clear()
+                    contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    contentResolver.update(uri, contentValues, null, null)
+                }
+                Toast.makeText(this, "📸 Screenshot saved to Pictures/XternalControl!", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Failed to save screenshot: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun applyBackgroundTheme() {
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        val bgType = prefs.getString("glasses_bg_type", "color") ?: "color"
+
+        if (bgType == "image") {
+            val wallpaperFile = File(filesDir, "glasses_wallpaper.png")
+            if (wallpaperFile.exists()) {
+                val bmp = android.graphics.BitmapFactory.decodeFile(wallpaperFile.absolutePath)
+                ivExtBackground.setImageBitmap(bmp)
+                ivExtBackground.visibility = View.VISIBLE
+            } else {
+                ivExtBackground.setImageResource(R.drawable.bg_trackpad_grid)
+                ivExtBackground.visibility = View.VISIBLE
             }
         } else {
-            // Fallback to simulated app dialog for prototype testing
-            virtualAppContainer.visibility = View.VISIBLE
-            cvExtNavBar.visibility = View.VISIBLE
-            closeVirtualApps(keepNavBar = true)
-            
-            val nameLower = packageName.lowercase()
-            if (nameLower.contains("map") || nameLower.hashCode() % 3 == 0) {
-                layoutMapApp.visibility = View.VISIBLE
-                mapZoomLevel = 1.0f
-                updateMapZoomText()
-            } else if (nameLower.contains("chrome") || nameLower.contains("browser") || nameLower.contains("web") || nameLower.hashCode() % 2 == 0) {
-                layoutBrowserApp.visibility = View.VISIBLE
-                findViewById<Button>(R.id.btnBrowserClickMe).setOnClickListener {
-                    Toast.makeText(this, "Simulated Web Link Clicked!", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                layoutNotesApp.visibility = View.VISIBLE
-                etNotesArea.requestFocus()
+            val hex = prefs.getString("glasses_bg_color", "#0A0B10") ?: "#0A0B10"
+            try {
+                val parsedColor = Color.parseColor(hex)
+                ivExtBackground.setImageDrawable(null)
+                ivExtBackground.visibility = View.GONE
+                rootContainer.setBackgroundColor(parsedColor)
+            } catch (e: Exception) {
+                ivExtBackground.visibility = View.GONE
+                rootContainer.setBackgroundColor(Color.BLACK)
             }
         }
-        cvContextMenu.visibility = View.GONE
+    }
+
+    private fun setupSharedPreferencesListener() {
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        sharedPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key?.startsWith("glasses_bg_") == true || key?.startsWith("wallpaper_") == true) {
+                applyBackgroundTheme()
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(sharedPrefsListener)
+    }
+
+    private fun showGuideDialog() {
+        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        builder.setTitle("👓 Windows Desktop Guide & Tips")
+        builder.setMessage(
+            "🪟 Windows Desktop Controls:\n" +
+            "• Taskbar: Click 'Start' to open the Start Menu search & app drawer.\n" +
+            "• Pinned Apps: Pinned apps appear both on your Desktop & Taskbar.\n" +
+            "• System Tray: Check live Wi-Fi, Battery %, Time & Notification flyout.\n" +
+            "• Multitasking Blob: When an app is open, tap ⚡ on the right to switch apps in 1-click!\n\n" +
+            "🖱️ Trackpad & Mouse:\n" +
+            "• 1-Finger Tap: Left Click / Select\n" +
+            "• Long Press (600ms): Pin / Unpin apps\n" +
+            "• 2-Finger Drag: Scroll lists smoothly\n\n" +
+            "📸 Screenshot Tool:\n" +
+            "• Tap 📸 on your phone controller to capture and save the external glasses display!"
+        )
+        builder.setPositiveButton("GOT IT") { dialog, _ -> dialog.dismiss() }
+        builder.show()
     }
 
     private fun tryEnableHighestResolution() {
@@ -625,7 +713,7 @@ class ExternalActivity : AppCompatActivity() {
         val rx = x - location[0]
         val ry = y - location[1]
         if (rx < 0 || rx > view.width || ry < 0 || ry > view.height) return null
-        if (view is android.view.ViewGroup) {
+        if (view is ViewGroup) {
             for (i in view.childCount - 1 downTo 0) {
                 val child = view.getChildAt(i)
                 val found = findViewAt(child, x, y)
@@ -650,12 +738,12 @@ class ExternalActivity : AppCompatActivity() {
     private fun injectTouchEvent(x: Float, y: Float) {
         val downTime = SystemClock.uptimeMillis()
         val eventTime = SystemClock.uptimeMillis()
-        
+
         val properties = arrayOf(MotionEvent.PointerProperties().apply {
             id = 0
             toolType = MotionEvent.TOOL_TYPE_FINGER
         })
-        
+
         val coords = arrayOf(MotionEvent.PointerCoords().apply {
             this.x = x
             this.y = y
@@ -668,7 +756,7 @@ class ExternalActivity : AppCompatActivity() {
             MotionEvent.ACTION_DOWN, 1, properties, coords,
             0, 0, 1.0f, 1.0f, 0, 0, 0, 0
         )
-        
+
         val upEvent = MotionEvent.obtain(
             downTime, eventTime + 30,
             MotionEvent.ACTION_UP, 1, properties, coords,
@@ -677,267 +765,63 @@ class ExternalActivity : AppCompatActivity() {
 
         rootContainer.dispatchTouchEvent(downEvent)
         rootContainer.dispatchTouchEvent(upEvent)
-        
-        downEvent.recycle()
-        upEvent.recycle()
     }
 
     private fun isPointInsideView(x: Float, y: Float, view: View): Boolean {
         val location = IntArray(2)
         view.getLocationOnScreen(location)
-        val rx = location[0]
-        val ry = location[1]
-        return x >= rx && x <= rx + view.width && y >= ry && y <= ry + view.height
+        val viewX = location[0]
+        val viewY = location[1]
+        return (x >= viewX && x <= (viewX + view.width)) &&
+                (y >= viewY && y <= (viewY + view.height))
     }
 
-    private fun applyPlayStoreAppRestrictions() {
-        if (BuildConfig.FLAVOR != "playstore") return
-
-        val preferredPackages = listOf(
-            "com.google.android.youtube",
-            "com.android.chrome",
-            "com.google.android.apps.maps",
-            "org.mozilla.firefox",
-            "com.google.android.googlequicksearchbox",
-            "com.android.settings"
-        )
-
-        val allowedPackages = allApps.filter { app ->
-            preferredPackages.contains(app.packageName)
-        }.map { it.packageName }.toMutableSet()
-
-        if (allowedPackages.size < 4) {
-            val otherApps = allApps.filter { !allowedPackages.contains(it.packageName) }
-            for (app in otherApps) {
-                if (allowedPackages.size >= 4) break
-                allowedPackages.add(app.packageName)
-            }
-        }
-
-        for (app in allApps) {
-            app.isLocked = !allowedPackages.contains(app.packageName)
-        }
+    private fun dpToPx(dp: Int): Float {
+        return dp * resources.displayMetrics.density
     }
 
-    private fun showGuideDialog() {
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("ℹ️ Control Guide & Tips")
-            .setMessage("👆 Trackpad Controls:\n• Tap trackpad to select\n• Use 2 fingers to scroll lists\n\n🎬 Apple TV / Netflix / DRM Fix:\n• Black screen or video won't play? Tap the 🎬 button on your phone controller to auto-hide the cursor overlay and play DRM content.\n\n📱 App Won't Open:\n• Launch the app directly from your phone controller's APPS tab!")
-            .setPositiveButton("Got It!", null)
-            .show()
-    }
-
-    private fun showProUpgradeDialog() {
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("Pro Feature")
-            .setMessage("Launching this app is a Pro feature.\n\nIn-app purchases are coming soon to unlock unlimited apps!")
-            .setPositiveButton("OK", null)
-            .show()
-    }
-
-    private fun showDonationDialog() {
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("Support the Creator")
-            .setMessage("Do you like using Xternal Control?\n\nIf this app has been useful to you, please consider supporting the creator. Your support makes a meaningful contribution to my family with a special needs child.\n\nEverything remains fully free to use!")
-            .setPositiveButton("☕ Buy Me a Coffee") { _, _ ->
-                try {
-                    val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://buymeacoffee.com/akworkshop"))
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-            .setNegativeButton("Maybe Later", null)
-            .show()
-    }
-
-    override fun onBackPressed() {
-        if (::layoutAllAppsOverlay.isInitialized && layoutAllAppsOverlay.visibility == View.VISIBLE) {
-            layoutAllAppsOverlay.visibility = View.GONE
-            return
-        }
-        super.onBackPressed()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        applyBackgroundTheme()
-        clockHandler.post(clockRunnable)
-    }
-
-    override fun onPause() {
-        clockHandler.removeCallbacks(clockRunnable)
-        super.onPause()
-    }
-
-    private fun applyBackgroundTheme() {
-        if (isPipMode) return
+    private fun loadListsFromPreferences() {
         val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
-        val bgType = prefs.getString("glasses_bg_type", "color") ?: "color"
-
-        if (bgType == "image") {
-            val wallpaperFile = java.io.File(filesDir, "glasses_wallpaper.png")
-            if (wallpaperFile.exists()) {
-                val bitmap = android.graphics.BitmapFactory.decodeFile(wallpaperFile.absolutePath)
-                if (bitmap != null) {
-                    ivExtBackground.setImageBitmap(bitmap)
-                    ivExtBackground.visibility = View.VISIBLE
-                    rootContainer.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                    return
-                }
-            }
-        }
-
-        // Fallback / Color mode
-        ivExtBackground.visibility = View.GONE
-        val colorHex = prefs.getString("glasses_bg_color", "#000000") ?: "#000000"
         try {
-            val parsedColor = android.graphics.Color.parseColor(colorHex)
-            rootContainer.setBackgroundColor(parsedColor)
-        } catch (e: Exception) {
-            rootContainer.setBackgroundColor(android.graphics.Color.BLACK)
-        }
-    }
-
-    private fun updateClock() {
-        val now = java.util.Date()
-        val timeFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
-        val dateFormat = java.text.SimpleDateFormat("E, MMM d", java.util.Locale.getDefault())
-        tvClock.text = timeFormat.format(now)
-        tvDate.text = dateFormat.format(now)
-    }
-
-    private fun extractDominantColor(drawable: android.graphics.drawable.Drawable): Int {
-        try {
-            val bitmap = when (drawable) {
-                is android.graphics.drawable.BitmapDrawable -> drawable.bitmap
-                else -> {
-                    val bmp = android.graphics.Bitmap.createBitmap(
-                        drawable.intrinsicWidth.coerceAtLeast(1),
-                        drawable.intrinsicHeight.coerceAtLeast(1),
-                        android.graphics.Bitmap.Config.ARGB_8888
-                    )
-                    val canvas = android.graphics.Canvas(bmp)
-                    drawable.setBounds(0, 0, canvas.width, canvas.height)
-                    drawable.draw(canvas)
-                    bmp
-                }
-            }
-
-            var colorCount = 0
-            var redSum = 0L
-            var greenSum = 0L
-            var blueSum = 0L
-
-            val w = bitmap.width
-            val h = bitmap.height
-            val stepX = (w / 15).coerceAtLeast(1)
-            val stepY = (h / 15).coerceAtLeast(1)
-
-            for (x in 0 until w step stepX) {
-                for (y in 0 until h step stepY) {
-                    val pixel = bitmap.getPixel(x, y)
-                    val alpha = android.graphics.Color.alpha(pixel)
-                    val r = android.graphics.Color.red(pixel)
-                    val g = android.graphics.Color.green(pixel)
-                    val b = android.graphics.Color.blue(pixel)
-
-                    val isWhite = r > 225 && g > 225 && b > 225
-                    val isBlack = r < 30 && g < 30 && b < 30
-
-                    if (alpha > 150 && !isWhite && !isBlack) {
-                        redSum += r
-                        greenSum += g
-                        blueSum += b
-                        colorCount++
-                    }
-                }
-            }
-
-            if (colorCount > 0) {
-                val r = (redSum / colorCount).toInt()
-                val g = (greenSum / colorCount).toInt()
-                val b = (blueSum / colorCount).toInt()
-
-                val hsv = FloatArray(3)
-                android.graphics.Color.RGBToHSV(r, g, b, hsv)
-
-                if (hsv[1] > 0.08f) {
-                    hsv[1] = hsv[1].coerceAtLeast(0.60f)
-                }
-                hsv[2] = 0.42f
-
-                return android.graphics.Color.HSVToColor(hsv)
+            val favsStr = prefs.getString("favourite_packages", "") ?: ""
+            favouritePackages.clear()
+            if (favsStr.isNotEmpty()) {
+                favouritePackages.addAll(favsStr.split(","))
             }
         } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return 0xFF202738.toInt()
-    }
-
-    private fun dpToPx(dp: Int): Int {
-        val density = resources.displayMetrics.density
-        return (dp * density).toInt()
-    }
-}
-
-class FavAppsAdapter(
-    private var apps: List<AppInfo>,
-    private val onItemClick: (AppInfo) -> Unit,
-    private val onItemLongClick: (AppInfo) -> Unit
-) : RecyclerView.Adapter<FavAppsAdapter.ViewHolder>() {
-
-    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val cardTvBanner: androidx.cardview.widget.CardView = view.findViewById(R.id.cardTvBanner)
-        val ivBanner: ImageView = view.findViewById(R.id.ivBanner)
-        val layoutFallbackContent: View = view.findViewById(R.id.layoutFallbackContent)
-        val ivAppIcon: ImageView = view.findViewById(R.id.ivAppIcon)
-        val tvAppName: TextView = view.findViewById(R.id.tvAppName)
-        val tvLockBadge: TextView = view.findViewById(R.id.tvLockBadge)
-    }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = android.view.LayoutInflater.from(parent.context).inflate(R.layout.item_app_tv_banner, parent, false)
-        return ViewHolder(view)
-    }
-
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val app = apps[position]
-
-        if (app.banner != null) {
-            holder.ivBanner.setImageDrawable(app.banner)
-            holder.ivBanner.visibility = View.VISIBLE
-            holder.layoutFallbackContent.visibility = View.GONE
-            holder.cardTvBanner.setCardBackgroundColor(0xFF0C0D12.toInt())
-        } else {
-            holder.ivBanner.visibility = View.GONE
-            holder.layoutFallbackContent.visibility = View.VISIBLE
-            holder.ivAppIcon.setImageDrawable(app.icon)
-            holder.tvAppName.text = app.label
-
-            val cardColor = app.dominantColor ?: 0xFF1C202E.toInt()
-            holder.cardTvBanner.setCardBackgroundColor(cardColor)
+            try {
+                val favsSet = prefs.getStringSet("favourite_packages", emptySet()) ?: emptySet()
+                favouritePackages.clear()
+                favouritePackages.addAll(favsSet)
+            } catch (e2: Exception) {
+                favouritePackages.clear()
+            }
         }
 
-        if (app.isLocked) {
-            holder.itemView.alpha = 0.4f
-            holder.tvLockBadge.visibility = View.VISIBLE
-        } else {
-            holder.itemView.alpha = 1.0f
-            holder.tvLockBadge.visibility = View.GONE
-        }
-
-        holder.itemView.setOnClickListener { onItemClick(app) }
-        holder.itemView.setOnLongClickListener {
-            onItemLongClick(app)
-            true
+        try {
+            val recentsStr = prefs.getString("recent_packages", "") ?: ""
+            recentPackages.clear()
+            if (recentsStr.isNotEmpty()) {
+                recentPackages.addAll(recentsStr.split(","))
+            }
+        } catch (e: Exception) {
+            try {
+                val recentsSet = prefs.getStringSet("recent_packages", emptySet()) ?: emptySet()
+                recentPackages.clear()
+                recentPackages.addAll(recentsSet)
+            } catch (e2: Exception) {
+                recentPackages.clear()
+            }
         }
     }
 
-    override fun getItemCount(): Int = apps.size
-
-    fun updateData(newApps: List<AppInfo>) {
-        this.apps = newApps
-        notifyDataSetChanged()
+    private fun saveListsToPreferences() {
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        val recentsStr = recentPackages.joinToString(",")
+        val favsStr = favouritePackages.joinToString(",")
+        prefs.edit()
+            .putString("recent_packages", recentsStr)
+            .putString("favourite_packages", favsStr)
+            .apply()
     }
 }

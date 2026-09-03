@@ -15,7 +15,17 @@ object InteractionBridge {
     var appLaunchListener: ((String) -> Unit)? = null
     var zoomListener: ((Boolean) -> Unit)? = null
     var pipModeListener: ((Boolean) -> Unit)? = null
+    var screenshotRequestListener: (() -> Unit)? = null
+    var homeRequestListener: (() -> Unit)? = null
     var isKeyboardActive: Boolean = false
+
+    fun sendScreenshotRequest() {
+        runOnMain { screenshotRequestListener?.invoke() }
+    }
+
+    fun sendHomeRequest() {
+        runOnMain { homeRequestListener?.invoke() }
+    }
 
     fun sendCursorMove(dx: Float, dy: Float) {
         runOnMain { cursorMoveListener?.invoke(dx, dy) }

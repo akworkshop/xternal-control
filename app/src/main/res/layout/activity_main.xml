@@ -628,20 +628,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:orientation="horizontal"
-                android:gravity="center_vertical"
+                android:gravity="center"
                 android:background="@drawable/bg_glass_card"
-                android:paddingHorizontal="12dp"
+                android:paddingHorizontal="6dp"
                 android:layout_marginBottom="4dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="REMOTE CONTROLS"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="9sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.05"/>
 
                 <!-- Remote Back Button -->
                 <TextView
@@ -712,6 +702,21 @@
                     android:background="@drawable/bg_rounded_search"
                     android:gravity="center"
                     android:text="🎬"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:clickable="true"
+                    android:focusable="true"/>
+
+                <!-- Screenshot External Screen Button -->
+                <TextView
+                    android:id="@+id/btnScreenshot"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_rounded_search"
+                    android:gravity="center"
+                    android:text="📸"
                     android:textColor="@color/text_primary"
                     android:textStyle="bold"
                     android:textSize="18sp"

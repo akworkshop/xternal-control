@@ -345,6 +345,24 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "DRM Play Active (Cursor hidden)", Toast.LENGTH_SHORT).show()
         }
 
+        val btnScreenshot = findViewById<View>(R.id.btnScreenshot)
+        btnScreenshot?.setOnClickListener {
+            val service = ControllerAccessibilityService.instance
+            if (service != null && externalDisplayId != -1 && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                Toast.makeText(this, "Capturing external screen...", Toast.LENGTH_SHORT).show()
+                service.captureDisplayScreenshot(externalDisplayId) { bitmap ->
+                    if (bitmap != null) {
+                        saveScreenshotBitmapToGallery(bitmap)
+                    } else {
+                        InteractionBridge.sendScreenshotRequest()
+                    }
+                }
+            } else {
+                InteractionBridge.sendScreenshotRequest()
+                Toast.makeText(this, "Capturing external screen...", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         var lastTheaterClickTime: Long = 0
         layoutTheaterModeOverlay.setOnClickListener {
             val currentTime = System.currentTimeMillis()
@@ -392,22 +410,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.btnMainHome).setOnClickListener {
+            InteractionBridge.sendHomeRequest()
             if (externalDisplayId != -1) {
                 try {
-                    // Brings ExternalActivity home launcher back to foreground on the glasses
                     val options = ActivityOptions.makeBasic()
                     options.launchDisplayId = externalDisplayId
                     val intent = Intent(this, ExternalActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     }
                     startActivity(intent, options.toBundle())
-                    Toast.makeText(this, "Glasses returned to Launcher Grid", Toast.LENGTH_SHORT).show()
-                } catch (e: SecurityException) {
-                    e.printStackTrace()
-                    Toast.makeText(this, "Security restriction: Cannot launch on secondary display", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Glasses returned to Desktop", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    Toast.makeText(this, "Failed to return home: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
             if (isSimulating) {
@@ -977,7 +991,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupSimulatedGlassesUI() {
         simRoot?.let { root ->
             simCursor = root.findViewById(R.id.ivCursor)
-            simGrid = root.findViewById(R.id.rvAppsGrid)
+            simGrid = root.findViewById(R.id.rvDesktopIcons)
             simAppContainer = root.findViewById(R.id.virtualAppContainer)
             simBrowserApp = root.findViewById(R.id.layoutBrowserApp)
             simNotesApp = root.findViewById(R.id.layoutNotesApp)
@@ -998,7 +1012,7 @@ class MainActivity : AppCompatActivity() {
                     toggleAppFavourite(app)
                 }
             )
-            simGrid?.layoutManager = GridLayoutManager(this, 3) // 3 columns for side container width
+            simGrid?.layoutManager = GridLayoutManager(this, 1)
             simGrid?.adapter = simAppAdapter
             sortAndRefreshAppLists()
 
@@ -1011,24 +1025,14 @@ class MainActivity : AppCompatActivity() {
             }
 
             // Bind click listeners for simulated app Close buttons
-            root.findViewById<View>(R.id.btnBrowserClose).setOnClickListener {
+            root.findViewById<View>(R.id.btnBrowserClose)?.setOnClickListener {
                 closeSimulatedApps()
             }
-            root.findViewById<View>(R.id.btnNotesClose).setOnClickListener {
+            root.findViewById<View>(R.id.btnNotesClose)?.setOnClickListener {
                 closeSimulatedApps()
             }
-            root.findViewById<View>(R.id.btnMapClose).setOnClickListener {
+            root.findViewById<View>(R.id.btnMapClose)?.setOnClickListener {
                 closeSimulatedApps()
-            }
-
-            // Bind click listeners for simulated map zoom buttons
-            root.findViewById<View>(R.id.btnMapZoomIn).setOnClickListener {
-                simMapZoomLevel = (simMapZoomLevel + 0.2f).coerceAtMost(3.0f)
-                updateSimulatedMapZoomText()
-            }
-            root.findViewById<View>(R.id.btnMapZoomOut).setOnClickListener {
-                simMapZoomLevel = (simMapZoomLevel - 0.2f).coerceAtLeast(0.5f)
-                updateSimulatedMapZoomText()
             }
 
             // Bind click listeners for floating Navbar back & home buttons
@@ -1443,14 +1447,14 @@ class MainActivity : AppCompatActivity() {
             tvBtn.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_cyan)
             tvBtn.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
             Toast.makeText(this, "PiP Pass-Through Active (Glasses background is black)", Toast.LENGTH_SHORT).show()
+            InteractionBridge.sendPipMode(true)
 
-            // 1. Go Home on target display (Brings launcher to front, triggering YouTube/etc. to go into PiP Mode)
             if (externalDisplayId != -1) {
                 try {
                     val options = ActivityOptions.makeBasic()
                     options.launchDisplayId = externalDisplayId
                     val intent = Intent(this, ExternalActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                     }
                     startActivity(intent, options.toBundle())
                 } catch (e: Exception) {
@@ -1461,10 +1465,21 @@ class MainActivity : AppCompatActivity() {
             tvBtn.backgroundTintList = null
             tvBtn.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
             Toast.makeText(this, "PiP Pass-Through Deactivated", Toast.LENGTH_SHORT).show()
-        }
+            InteractionBridge.sendPipMode(false)
 
-        // 2. Broadcast state change to ExternalActivity to toggle background black and hide/show launcher UI
-        InteractionBridge.sendPipMode(isPipModeActive)
+            if (externalDisplayId != -1) {
+                try {
+                    val options = ActivityOptions.makeBasic()
+                    options.launchDisplayId = externalDisplayId
+                    val intent = Intent(this, ExternalActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    }
+                    startActivity(intent, options.toBundle())
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
     }
 
 
@@ -1597,6 +1612,36 @@ class MainActivity : AppCompatActivity() {
                 wallpaperFile.delete()
             }
             setGlassesBackgroundColor("#000000", "OLED Black (Image Cleared)")
+        }
+    }
+
+    private fun saveScreenshotBitmapToGallery(bitmap: android.graphics.Bitmap) {
+        try {
+            val filename = "Xternal_Screenshot_${System.currentTimeMillis()}.png"
+            val contentValues = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/XternalControl")
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            }
+
+            val uri = contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            if (uri != null) {
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    contentValues.clear()
+                    contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                    contentResolver.update(uri, contentValues, null, null)
+                }
+                Toast.makeText(this, "📸 Screenshot saved to Pictures/XternalControl!", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Failed to save screenshot: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 }

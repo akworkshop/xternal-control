@@ -50,6 +50,41 @@ class ControllerAccessibilityService : AccessibilityService() {
         return performGlobalAction(GLOBAL_ACTION_RECENTS)
     }
 
+    fun captureDisplayScreenshot(displayId: Int, onComplete: (android.graphics.Bitmap?) -> Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                takeScreenshot(
+                    displayId,
+                    mainExecutor,
+                    object : TakeScreenshotCallback {
+                        override fun onSuccess(screenshot: ScreenshotResult) {
+                            try {
+                                val hardwareBuffer = screenshot.hardwareBuffer
+                                val colorSpace = screenshot.colorSpace
+                                val bitmap = android.graphics.Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
+                                val copy = bitmap?.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+                                hardwareBuffer.close()
+                                onComplete(copy)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                onComplete(null)
+                            }
+                        }
+
+                        override fun onFailure(errorCode: Int) {
+                            onComplete(null)
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onComplete(null)
+            }
+        } else {
+            onComplete(null)
+        }
+    }
+
     fun dispatchClick(displayId: Int, x: Float, y: Float): Boolean {
         val clickPath = Path().apply {
             moveTo(x, y)

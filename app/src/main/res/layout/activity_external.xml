@@ -15,56 +15,86 @@
         android:scaleType="centerCrop"
         android:visibility="gone" />
 
-    <!-- 1. Launcher View Container (Flauncher / Android TV Style) -->
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <!-- 1. Windows Style Desktop Workspace Container -->
+    <RelativeLayout
         android:id="@+id/launcherContainer"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:padding="20dp">
+        android:layout_height="match_parent">
 
-        <!-- Top Header Bar -->
-        <RelativeLayout
-            android:id="@+id/headerBar"
-            android:layout_width="match_parent"
+        <!-- Left Desktop Icons Column / Grid (Pinned Favorite Apps) -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvDesktopIcons"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentTop="true"
+            android:layout_above="@id/layoutTaskbar"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            android:overScrollMode="never"
+            android:nestedScrollingEnabled="false"
+            android:scrollbars="none"
+            tools:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            tools:spanCount="5"
+            tools:listitem="@layout/item_desktop_icon" />
+
+        <!-- Resolution & Glasses Status Info Badge (Top-Right of Desktop) -->
+        <TextView
+            android:id="@+id/tvExtHeader"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentTop="true"
+            android:layout_marginEnd="16dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_rounded_search"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="5dp"
+            android:text="4K 3840×2160"
+            android:textColor="@color/neon_emerald"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.05" />
+
+        <!-- 💖 Desktop Support Creator Widget (Bottom-Right of Desktop, above Taskbar) -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardDesktopSupport"
+            android:layout_width="260dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_above="@id/layoutTaskbar"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="14dp"
+            app:cardBackgroundColor="#CC1E222B"
+            app:cardElevation="6dp">
 
             <LinearLayout
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:layout_alignParentStart="true"
-                android:layout_centerVertical="true">
+                android:padding="12dp">
 
                 <TextView
-                    android:id="@+id/tvClock"
-                    android:layout_width="wrap_content"
+                    android:id="@+id/tvSupportMsg"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="10:25 PM"
+                    android:text="💖 Love Xternal Control? Support creator's family with a coffee!"
                     android:textColor="@color/text_primary"
-                    android:textSize="22sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvDate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Mon, Jul 20"
-                    android:textColor="@color/text_secondary"
                     android:textSize="11sp"
-                    android:textStyle="bold" />
+                    android:lineSpacingExtra="2dp" />
 
-                <!-- ℹ️ Info Guide Button (Taller & Under Time) -->
                 <LinearLayout
-                    android:id="@+id/btnInfoGuide"
+                    android:id="@+id/btnBuyMeCoffee"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_gravity="end"
                     android:background="@drawable/bg_rounded_search"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="8dp"
+                    android:backgroundTint="#FFDD00"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="6dp"
                     android:gravity="center"
                     android:orientation="horizontal"
                     android:clickable="true"
@@ -73,251 +103,198 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="ℹ️ GUIDE"
-                        android:textColor="@color/neon_cyan"
-                        android:textSize="12sp"
+                        android:text="☕ BUY ME A COFFEE"
+                        android:textColor="#000000"
+                        android:textSize="10sp"
                         android:textStyle="bold" />
                 </LinearLayout>
             </LinearLayout>
+        </androidx.cardview.widget.CardView>
 
-            <!-- Status Info Badge -->
-            <TextView
-                android:id="@+id/tvExtHeader"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentEnd="true"
-                android:layout_centerVertical="true"
-                android:background="@drawable/bg_rounded_search"
-                android:paddingHorizontal="12dp"
-                android:paddingVertical="6dp"
-                android:text="GLASSES 1080P"
-                android:textColor="@color/neon_emerald"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.05" />
-        </RelativeLayout>
-
-        <!-- ALL APPS & 💖 SUPPORT BANNER ROW -->
-        <LinearLayout
-            android:id="@+id/layoutTopButtonsRow"
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
+        <!-- 🪟 Windows Start Menu Popup (Centered above Start Button) -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/layoutStartMenu"
+            android:layout_width="340dp"
+            android:layout_height="440dp"
+            android:layout_centerHorizontal="true"
+            android:layout_above="@id/layoutTaskbar"
             android:layout_marginBottom="8dp"
-            android:orientation="horizontal"
-            app:layout_constraintBottom_toTopOf="@id/tvFavHeader"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            android:visibility="gone"
+            app:cardCornerRadius="16dp"
+            app:cardBackgroundColor="#F2161A22"
+            app:cardElevation="16dp">
 
-            <!-- "ALL APPS" TV Banner Button (Left 30% Width - Clean Text Only) -->
-            <androidx.cardview.widget.CardView
-                android:id="@+id/cardAllAppsBanner"
-                android:layout_width="140dp"
+            <RelativeLayout
+                android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                app:cardCornerRadius="12dp"
-                app:cardBackgroundColor="@color/bg_card"
-                app:cardElevation="4dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground">
+                android:padding="14dp">
 
-                <RelativeLayout
+                <!-- Start Menu Header: Search Box -->
+                <EditText
+                    android:id="@+id/etStartMenuSearch"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:layout_alignParentTop="true"
+                    android:background="@drawable/bg_white_search_box"
+                    android:hint="Type here to search apps..."
+                    android:textColorHint="#757575"
+                    android:textColor="#121212"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="14dp"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:imeOptions="actionSearch" />
+
+                <!-- Start Menu Apps List / Grid -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvStartMenuApps"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:padding="8dp">
+                    android:layout_below="@id/etStartMenuSearch"
+                    android:layout_above="@id/layoutStartMenuFooter"
+                    android:layout_marginTop="10dp"
+                    android:layout_marginBottom="10dp"
+                    android:scrollbars="vertical"
+                    tools:listitem="@layout/item_start_menu_app" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_centerInParent="true"
-                        android:text="ALL APPS"
-                        android:textColor="@color/neon_cyan"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.08" />
-
-                </RelativeLayout>
-            </androidx.cardview.widget.CardView>
-
-            <!-- 💖 Support Creator Banner Card (Right Remaining Width - GitHub Flavor Only) -->
-            <androidx.cardview.widget.CardView
-                android:id="@+id/cardSupportBanner"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                app:cardCornerRadius="12dp"
-                app:cardBackgroundColor="@color/bg_card"
-                app:cardElevation="4dp">
-
+                <!-- Start Menu Footer Bar -->
                 <RelativeLayout
+                    android:id="@+id/layoutStartMenuFooter"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:paddingHorizontal="10dp"
-                    android:paddingVertical="6dp">
-
-                    <TextView
-                        android:id="@+id/tvSupportMsg"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_toStartOf="@id/btnBuyMeCoffee"
-                        android:layout_marginEnd="6dp"
-                        android:layout_centerVertical="true"
-                        android:text="Love my app? If you like my app, you can support me by buying me a coffee! It will be a great support for my family."
-                        android:textColor="@color/text_primary"
-                        android:textSize="9sp"
-                        android:maxLines="3"
-                        android:ellipsize="end" />
+                    android:layout_height="40dp"
+                    android:layout_alignParentBottom="true"
+                    android:background="#33FFFFFF"
+                    android:paddingHorizontal="8dp">
 
                     <LinearLayout
-                        android:id="@+id/btnBuyMeCoffee"
+                        android:id="@+id/btnStartGuide"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_alignParentEnd="true"
+                        android:layout_alignParentStart="true"
                         android:layout_centerVertical="true"
                         android:background="@drawable/bg_rounded_search"
-                        android:paddingHorizontal="8dp"
+                        android:paddingHorizontal="10dp"
                         android:paddingVertical="5dp"
-                        android:gravity="center"
-                        android:orientation="horizontal"
                         android:clickable="true"
                         android:focusable="true">
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="☕ BUY ME A COFFEE"
+                            android:text="ℹ️ GUIDE"
                             android:textColor="@color/neon_cyan"
-                            android:textSize="9sp"
+                            android:textSize="11sp"
                             android:textStyle="bold" />
                     </LinearLayout>
 
+                    <TextView
+                        android:id="@+id/btnCloseStartMenu"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:text="✕ CLOSE"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp"
+                        android:padding="6dp"
+                        android:clickable="true"
+                        android:focusable="true" />
                 </RelativeLayout>
-            </androidx.cardview.widget.CardView>
+            </RelativeLayout>
+        </androidx.cardview.widget.CardView>
 
-        </LinearLayout>
-
-        <!-- ⭐ FAVORITE APPS BOTTOM DOCK (2.25 ROWS PEEKING GRID) -->
-        <TextView
-            android:id="@+id/tvFavHeader"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:text="⭐ FAVORITES"
-            android:textColor="@color/neon_cyan"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.08"
-            app:layout_constraintBottom_toTopOf="@id/rvFavAppsShelf"
-            app:layout_constraintStart_toStartOf="parent" />
-
-        <TextView
-            android:id="@+id/tvFavEmptyState"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:text="Tip: Long-click any app on your controller to pin to Favorites."
-            android:textColor="@color/text_secondary"
-            android:textSize="11sp"
-            android:visibility="gone"
-            app:layout_constraintBottom_toTopOf="@id/rvFavAppsShelf"
-            app:layout_constraintStart_toStartOf="parent" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvFavAppsShelf"
+        <!-- 🪟 Windows Bottom Taskbar -->
+        <RelativeLayout
+            android:id="@+id/layoutTaskbar"
             android:layout_width="match_parent"
-            android:layout_height="145dp"
-            android:layout_marginBottom="4dp"
-            android:scrollbars="vertical"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            tools:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
-            tools:spanCount="6"
-            tools:listitem="@layout/item_app_tv_banner" />
+            android:layout_height="48dp"
+            android:layout_alignParentBottom="true"
+            android:background="@drawable/bg_taskbar"
+            android:paddingHorizontal="12dp">
 
-        <!-- 📱 ALL APPLICATIONS OVERLAY DRAWER -->
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/layoutAllAppsOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/bg_glass_card"
-            android:padding="12dp"
-            android:visibility="gone"
-            app:layout_constraintTop_toBottomOf="@id/headerBar"
-            app:layout_constraintBottom_toBottomOf="parent">
+            <!-- Centered Start Menu & Pinned Taskbar Apps (Windows 11 Style) -->
+            <LinearLayout
+                android:id="@+id/layoutCenterTaskbar"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_centerInParent="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <!-- Drawer Header -->
-            <RelativeLayout
-                android:id="@+id/allAppsDrawerHeader"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:layout_constraintTop_toTopOf="parent">
+                <!-- All Apps / Launcher Button (Modern 4-Tile Vector Grid) -->
+                <ImageView
+                    android:id="@+id/btnStartMenu"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="6dp"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_apps_grid"
+                    android:scaleType="fitCenter"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:contentDescription="All Apps" />
 
+                <!-- Taskbar Pinned Favorite Apps -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvTaskbarApps"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="4dp"
+                    android:orientation="horizontal"
+                    android:scrollbars="none"
+                    tools:listitem="@layout/item_taskbar_app" />
+            </LinearLayout>
+
+            <!-- System Tray (Right Side: Battery, Time & Date) -->
+            <LinearLayout
+                android:id="@+id/layoutSystemTray"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_alignParentEnd="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <!-- Battery Percentage & Icon -->
                 <TextView
-                    android:id="@+id/tvAllAppsHeader"
+                    android:id="@+id/tvBatteryPercent"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_centerVertical="true"
-                    android:text="📱 ALL APPLICATIONS"
-                    android:textColor="@color/neon_cyan"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.08" />
-
-                <!-- Close Drawer Button -->
-                <TextView
-                    android:id="@+id/btnCloseAllApps"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_alignParentEnd="true"
-                    android:layout_centerVertical="true"
-                    android:background="@drawable/bg_rounded_search"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="4dp"
-                    android:text="❌ CLOSE"
+                    android:text="🔋 100%"
                     android:textColor="@color/text_primary"
                     android:textSize="11sp"
                     android:textStyle="bold"
-                    android:clickable="true"
-                    android:focusable="true" />
-            </RelativeLayout>
+                    android:layout_marginEnd="12dp" />
 
-            <!-- App Search Bar (Solid White Background with Dark Text) -->
-            <EditText
-                android:id="@+id/etExtAppSearch"
-                android:layout_width="match_parent"
-                android:layout_height="36dp"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_white_search_box"
-                android:hint="Search apps..."
-                android:textColorHint="#757575"
-                android:textColor="#121212"
-                android:textSize="12sp"
-                android:paddingHorizontal="14dp"
-                android:inputType="text"
-                android:maxLines="1"
-                android:imeOptions="actionSearch"
-                app:layout_constraintTop_toBottomOf="@id/allAppsDrawerHeader"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toEndOf="parent" />
+                <!-- Date & Time (2 lines) -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="end">
 
-            <!-- All Apps Grid -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvAppsGrid"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_marginTop="8dp"
-                android:scrollbars="vertical"
-                app:layout_constraintTop_toBottomOf="@id/etExtAppSearch"
-                app:layout_constraintBottom_toBottomOf="parent"
-                tools:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
-                tools:spanCount="5"
-                tools:listitem="@layout/item_app_tv_banner" />
+                    <TextView
+                        android:id="@+id/tvTrayTime"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="10:25 PM"
+                        android:textColor="@color/text_primary"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
 
-        </androidx.constraintlayout.widget.ConstraintLayout>
+                    <TextView
+                        android:id="@+id/tvTrayDate"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="9/3/2026"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="9sp" />
+                </LinearLayout>
+            </LinearLayout>
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
+        </RelativeLayout>
+
+    </RelativeLayout>
 
     <!-- 2. Virtual Apps Overlay Container (for interactive demo) -->
     <FrameLayout
@@ -392,12 +369,11 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="This is a scrollable mock browser page. Drag two fingers up or down on the main device trackpad to scroll this content smoothly.\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam ac sapien et arcu interdum consectetur a ac metus. Integer volutpat sem quis tempor fringilla. Proin imperdiet sem elit, sed elementum dui finibus id. Integer varius scelerisque finibus.\n\nUt imperdiet nunc sed nulla condimentum, vitae tincidunt tortor porta. Morbi feugiat pretium mi ac efficitur. Integer imperdiet urna non erat rutrum eleifend.\n\nNam vel felis at ante dictum lacinia. Donec a tincidunt lacus, eget tristique ex. Mauris vulputate ac turpis et sollicitudin. Curabitur sed facilisis elit. In interdum massa eu ex pulvinar, non efficitur ipsum varius. Mauris at libero elit.\n\nVestibulum ut egestas urna. Duis vel facilisis quam. Vestibulum aliquet scelerisque ipsum sit amet efficitur. Sed finibus nisl lorem, eget tristique ex rhoncus facilisis. Sed vulputate sapien sed magna hendrerit luctus."
+                        android:text="This is a scrollable mock browser page. Drag two fingers up or down on the main device trackpad to scroll this content smoothly."
                         android:textColor="@color/text_secondary"
                         android:textSize="14sp"
                         android:lineSpacingExtra="6dp" />
 
-                    <!-- Clickable test button in browser -->
                     <Button
                         android:id="@+id/btnBrowserClickMe"
                         android:layout_width="wrap_content"
@@ -448,26 +424,21 @@
                     android:focusable="true"/>
             </RelativeLayout>
 
-            <!-- Text area to receive keyboard typing -->
             <EditText
                 android:id="@+id/etNotesArea"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_margin="16dp"
-                android:background="@drawable/bg_glass_card"
                 android:gravity="top|start"
-                android:hint="Type inside this note box using the main controller keyboard..."
+                android:hint="Type notes from Phone Keyboard..."
                 android:textColorHint="@color/text_secondary"
                 android:textColor="@color/text_primary"
-                android:textSize="16sp"
-                android:padding="16dp"
-                android:focusable="true"
-                android:clickable="true"
+                android:padding="20dp"
+                android:background="@null"
                 app:layout_constraintTop_toBottomOf="@id/notesHeader"
-                app:layout_constraintBottom_toBottomOf="parent" />
+                app:layout_constraintBottom_toBottomOf="parent"/>
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <!-- Simulated Map App -->
+        <!-- Simulated Maps App -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/layoutMapApp"
             android:layout_width="match_parent"
@@ -505,69 +476,39 @@
                     android:focusable="true"/>
             </RelativeLayout>
 
-            <!-- Map View Canvas -->
             <FrameLayout
-                android:id="@+id/mapCanvas"
+                android:id="@+id/flMapCanvas"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:background="#161B2E"
                 app:layout_constraintTop_toBottomOf="@id/mapHeader"
                 app:layout_constraintBottom_toBottomOf="parent">
 
-                <View
+                <ImageView
+                    android:id="@+id/ivMapImage"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="@drawable/bg_trackpad_grid"
-                    android:alpha="0.15" />
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/bg_trackpad_grid" />
 
-                <!-- Grid/Lines to simulate vector map -->
                 <TextView
                     android:id="@+id/tvMapCoords"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="center"
+                    android:layout_gravity="bottom|start"
+                    android:layout_margin="16dp"
+                    android:background="@drawable/bg_rounded_search"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="8dp"
                     android:text="SATELLITE POSITION: SECTOR 4-B\nZoom Level: 1.0x"
-                    android:textColor="@color/neon_emerald"
-                    android:textSize="14sp"
-                    android:gravity="center"
-                    android:alpha="0.7"
-                    android:lineSpacingExtra="4dp" />
-
-                <!-- Zoom Controls -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_gravity="end|bottom"
-                    android:layout_margin="24dp">
-
-                    <Button
-                        android:id="@+id/btnMapZoomIn"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:text="+"
-                        android:textColor="@color/text_primary"
-                        android:backgroundTint="@color/bg_card"
-                        android:textSize="18sp"
-                        app:cornerRadius="12dp"/>
-
-                    <Button
-                        android:id="@+id/btnMapZoomOut"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginTop="8dp"
-                        android:text="-"
-                        android:textColor="@color/text_primary"
-                        android:backgroundTint="@color/bg_card"
-                        android:textSize="18sp"
-                        app:cornerRadius="12dp"/>
-                </LinearLayout>
+                    android:textColor="@color/neon_cyan"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
             </FrameLayout>
         </androidx.constraintlayout.widget.ConstraintLayout>
 
     </FrameLayout>
 
-    <!-- Floating Navigation Bar for Virtual Screen -->
+    <!-- 4. Global Navigation Overlay Pills -->
     <androidx.cardview.widget.CardView
         android:id="@+id/cvExtNavBar"
         android:layout_width="wrap_content"
@@ -575,16 +516,16 @@
         android:layout_gravity="bottom|center_horizontal"
         android:layout_marginBottom="16dp"
         android:visibility="gone"
-        android:elevation="100dp"
         app:cardCornerRadius="20dp"
-        app:cardBackgroundColor="@color/bg_card">
+        app:cardBackgroundColor="@color/bg_card"
+        app:cardElevation="10dp">
 
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingHorizontal="16dp">
+            android:paddingHorizontal="8dp">
 
             <TextView
                 android:id="@+id/btnExtNavBack"
@@ -592,7 +533,7 @@
                 android:layout_height="match_parent"
                 android:gravity="center"
                 android:text="← BACK"
-                android:textColor="@color/text_secondary"
+                android:textColor="@color/text_primary"
                 android:textSize="12sp"
                 android:textStyle="bold"
                 android:paddingHorizontal="12dp"
@@ -621,7 +562,7 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- 3. Virtual Mouse Cursor pointer overlay (Disabled to prevent duplicate/ghost cursors) -->
+    <!-- 5. Cursor, Ripple & Context Menu -->
     <ImageView
         android:id="@+id/ivCursor"
         android:layout_width="24dp"
@@ -630,7 +571,6 @@
         android:elevation="99dp"
         android:visibility="gone" />
 
-    <!-- 4. Faint cursor ripple visual indicator for clicks -->
     <View
         android:id="@+id/viewCursorRipple"
         android:layout_width="40dp"
@@ -639,7 +579,6 @@
         android:alpha="0"
         android:elevation="98dp" />
 
-    <!-- 5. Right Click Context Menu -->
     <androidx.cardview.widget.CardView
         android:id="@+id/cvContextMenu"
         android:layout_width="160dp"
@@ -674,7 +613,7 @@
                 android:layout_height="36dp"
                 android:gravity="center_vertical"
                 android:paddingStart="12dp"
-                android:text="⌂ Return to Launcher"
+                android:text="⌂ Return to Desktop"
                 android:textColor="@color/text_primary"
                 android:textSize="13sp"
                 android:clickable="true"
