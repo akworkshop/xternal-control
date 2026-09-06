@@ -54,7 +54,6 @@ class MainActivity : AppCompatActivity() {
     // UI Elements
     private lateinit var tvStatusBadge: TextView
     private lateinit var tvConnectionInfo: TextView
-    private lateinit var btnSimulate: Button
     private lateinit var tvPermOverlay: TextView
     private lateinit var btnGrantOverlay: Button
     private lateinit var tvPermAccessibility: TextView
@@ -72,7 +71,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabTrackpadContainer: View
     private lateinit var tvTrackpadInstruction: View
     private lateinit var viewCursorMirror: View
-    private lateinit var simulationContainer: FrameLayout
     private lateinit var btnDonate: Button
     private var backPressedTime = 0L
 
@@ -85,7 +83,6 @@ class MainActivity : AppCompatActivity() {
     // Display Management
     private lateinit var displayManager: DisplayManager
     private var externalDisplayId: Int = -1
-    private var isSimulating: Boolean = false
 
     // Trackpad gestures state
     private var startX = 0f
@@ -126,29 +123,12 @@ class MainActivity : AppCompatActivity() {
         hasDraggedOrScrolled = true
         InteractionBridge.sendLongClick()
         
-        // Also if simulating or overlay cursor is active, trigger accessibility long click
         val service = ControllerAccessibilityService.instance
         if (externalDisplayId != -1 && service != null) {
             service.dispatchLongClick(externalDisplayId, overlayCursorX, overlayCursorY)
         }
     }
 
-    // Simulated Glasses UI Views (when simulation mode is ON)
-    private var simCursorX = 500f
-    private var simCursorY = 300f
-    private var simRoot: View? = null
-    private var simCursor: View? = null
-    private var simGrid: RecyclerView? = null
-    private var simAppContainer: View? = null
-    private var simBrowserApp: View? = null
-    private var simNotesApp: View? = null
-    private var simNotesArea: EditText? = null
-    private var simContextMenu: CardView? = null
-    private var simAppAdapter: AppListAdapter? = null
-    private var simMapApp: View? = null
-    private var simMapCoords: TextView? = null
-    private var simExtNavBar: View? = null
-    private var simMapZoomLevel = 1.0f
     private var appSearchQuery: String = ""
     private var originalBrightness: Float = -1f
 
@@ -204,7 +184,6 @@ class MainActivity : AppCompatActivity() {
     private fun initViews() {
         tvStatusBadge = findViewById(R.id.tvStatusBadge)
         tvConnectionInfo = findViewById(R.id.tvConnectionInfo)
-        btnSimulate = findViewById(R.id.btnSimulate)
         tvPermOverlay = findViewById(R.id.tvPermOverlay)
         btnGrantOverlay = findViewById(R.id.btnGrantOverlay)
         tvPermAccessibility = findViewById(R.id.tvPermAccessibility)
@@ -218,7 +197,6 @@ class MainActivity : AppCompatActivity() {
         viewCursorMirror = findViewById(R.id.viewCursorMirror)
         btnPipMode = findViewById(R.id.btnPipMode)
         btnToggleCursor = findViewById(R.id.btnToggleCursor)
-        simulationContainer = findViewById(R.id.simulationContainer)
 
         btnDonate = findViewById(R.id.btnDonate)
         val cardDonation = findViewById<View>(R.id.cardDonation)
@@ -276,13 +254,11 @@ class MainActivity : AppCompatActivity() {
             override fun onTabReselected(tab: TabLayout.Tab) {}
         })
 
-
-
         var sliderStartX = 0f
         var sliderLastTriggerX = 0f
 
         cvZoomSlider.setOnTouchListener { _, event ->
-            if (externalDisplayId == -1 && !isSimulating) {
+            if (externalDisplayId == -1) {
                 return@setOnTouchListener false
             }
 
@@ -308,7 +284,6 @@ class MainActivity : AppCompatActivity() {
                         if (currentTime - lastZoomTime > 300) {
                             val isZoomIn = totalDx > 0
                             InteractionBridge.sendZoom(isZoomIn)
-                            if (isSimulating) handleSimulatedZoom(isZoomIn)
                             val service = ControllerAccessibilityService.instance
                             if (externalDisplayId != -1 && service != null) {
                                 service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, isZoomIn)
@@ -325,8 +300,6 @@ class MainActivity : AppCompatActivity() {
             }
             true
         }
-
-
 
         val btnTheaterMode = findViewById<View>(R.id.btnTheaterMode)
         val layoutTheaterModeOverlay = findViewById<View>(R.id.layoutTheaterModeOverlay)
@@ -372,11 +345,6 @@ class MainActivity : AppCompatActivity() {
             lastTheaterClickTime = currentTime
         }
 
-        // Toggle Simulator Button Click
-        btnSimulate.setOnClickListener {
-            toggleSimulation()
-        }
-
         // Grant Overlay Permission Click
         btnGrantOverlay.setOnClickListener {
             val intent = Intent(
@@ -404,9 +372,6 @@ class MainActivity : AppCompatActivity() {
                 InteractionBridge.sendRightClick() // Routes BACK action to ExternalActivity
                 Toast.makeText(this, "Enable Accessibility for system-wide Back control", Toast.LENGTH_SHORT).show()
             }
-            if (isSimulating) {
-                closeSimulatedApps()
-            }
         }
 
         findViewById<View>(R.id.btnMainHome).setOnClickListener {
@@ -423,9 +388,6 @@ class MainActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
-            }
-            if (isSimulating) {
-                closeSimulatedApps()
             }
         }
 
@@ -451,7 +413,6 @@ class MainActivity : AppCompatActivity() {
 
                     InteractionBridge.sendCursorMove(dx, dy)
                     updateOverlayCursor(dx, dy)
-                    if (isSimulating) moveSimulatedCursor(dx, dy)
                 } else {
                     isFirstMouseHover = false
                 }
@@ -467,7 +428,6 @@ class MainActivity : AppCompatActivity() {
                     showOverlayCursor()
 
                     InteractionBridge.sendScroll(scrollDy)
-                    if (isSimulating) handleSimulatedScroll(scrollDy)
                     
                     val service = ControllerAccessibilityService.instance
                     if (externalDisplayId != -1 && service != null) {
@@ -621,17 +581,15 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Failed to launch on glasses display: ${e.message}", Toast.LENGTH_LONG).show()
             }
         } else {
-            if (!isSimulating) {
-                externalDisplayId = -1
-                tvStatusBadge.text = "DISCONNECTED"
-                tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.neon_danger))
-                tvStatusBadge.setBackgroundResource(R.drawable.bg_rounded_search)
-                tvStatusBadge.backgroundTintList = null
-                tvConnectionInfo.text = "No physical external display found."
-                deactivateTrackpadMode()
-                // Switch back to SETUP tab
-                tabLayout.getTabAt(0)?.select()
-            }
+            externalDisplayId = -1
+            tvStatusBadge.text = "DISCONNECTED"
+            tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.neon_danger))
+            tvStatusBadge.setBackgroundResource(R.drawable.bg_rounded_search)
+            tvStatusBadge.backgroundTintList = null
+            tvConnectionInfo.text = "No physical external display found."
+            deactivateTrackpadMode()
+            // Switch back to SETUP tab
+            tabLayout.getTabAt(0)?.select()
         }
     }
 
@@ -647,40 +605,6 @@ class MainActivity : AppCompatActivity() {
                 checkExternalDisplays()
             }
         }, null)
-    }
-
-    private fun toggleSimulation() {
-        if (isSimulating) {
-            // Turn off simulator
-            isSimulating = false
-            btnSimulate.text = "SIMULATE GLASSES"
-            simulationContainer.visibility = View.GONE
-            applyOrientationLayout()
-            checkExternalDisplays()
-        } else {
-            // Turn on simulator side-by-side
-            isSimulating = true
-            btnSimulate.text = "STOP SIMULATOR"
-            tvStatusBadge.text = "SIMULATING"
-            tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
-            tvStatusBadge.setBackgroundResource(R.drawable.bg_rounded_search)
-            tvStatusBadge.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_cyan)
-            tvConnectionInfo.text = "Simulated Glasses Panel Active on Right Side."
-            
-            // Enable trackpad
-            activateTrackpadMode()
-            // Switch to APPS tab automatically
-            tabLayout.getTabAt(1)?.select()
-            
-            // Inflate external layout inside simulator container
-            simulationContainer.visibility = View.VISIBLE
-            applyOrientationLayout()
-            simulationContainer.removeAllViews()
-            val inflater = LayoutInflater.from(this)
-            simRoot = inflater.inflate(R.layout.activity_external, simulationContainer, true)
-            
-            setupSimulatedGlassesUI()
-        }
     }
 
     private fun activateTrackpadMode() {
@@ -831,7 +755,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupTrackpad() {
         cvTrackpad.setOnTouchListener { _, event ->
-            if (externalDisplayId == -1 && !isSimulating) {
+            if (externalDisplayId == -1) {
                 return@setOnTouchListener false
             }
 
@@ -879,7 +803,6 @@ class MainActivity : AppCompatActivity() {
                         val scrollDx = (x - lastX) * 2.5f
                         val scrollDy = (y - lastY) * 2.5f
                         InteractionBridge.sendScroll(scrollDy)
-                        if (isSimulating) handleSimulatedScroll(scrollDy)
 
                         accumulatedScrollDx += scrollDx
                         accumulatedScrollDy += scrollDy
@@ -910,7 +833,6 @@ class MainActivity : AppCompatActivity() {
                         val dx = x - lastX
                         val dy = y - lastY
                         InteractionBridge.sendCursorMove(dx, dy)
-                        if (isSimulating) moveSimulatedCursor(dx, dy)
                         updateOverlayCursor(dx, dy)
                         
                         viewCursorMirror.x = x
@@ -987,231 +909,6 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    // --- SIMULATED GLASSES INTERACTIVE EVENT HANDLERS ---
-    private fun setupSimulatedGlassesUI() {
-        simRoot?.let { root ->
-            simCursor = root.findViewById(R.id.ivCursor)
-            simGrid = root.findViewById(R.id.rvDesktopIcons)
-            simAppContainer = root.findViewById(R.id.virtualAppContainer)
-            simBrowserApp = root.findViewById(R.id.layoutBrowserApp)
-            simNotesApp = root.findViewById(R.id.layoutNotesApp)
-            simNotesArea = root.findViewById(R.id.etNotesArea)
-            simContextMenu = root.findViewById(R.id.cvContextMenu)
-            simMapApp = root.findViewById(R.id.layoutMapApp)
-            simMapCoords = root.findViewById(R.id.tvMapCoords)
-            simExtNavBar = root.findViewById(R.id.cvExtNavBar)
-
-            // Setup app grid adapter
-            simAppAdapter = AppListAdapter(
-                allApps,
-                isGridLayout = true,
-                onItemClick = { app ->
-                    launchSimulatedApp(app.packageName)
-                },
-                onItemLongClick = { app ->
-                    toggleAppFavourite(app)
-                }
-            )
-            simGrid?.layoutManager = GridLayoutManager(this, 1)
-            simGrid?.adapter = simAppAdapter
-            sortAndRefreshAppLists()
-
-            // Center initial cursor
-            simCursor?.post {
-                simCursorX = root.width / 2f
-                simCursorY = root.height / 2f
-                simCursor?.x = simCursorX - simCursor!!.width / 2f
-                simCursor?.y = simCursorY - simCursor!!.height / 2f
-            }
-
-            // Bind click listeners for simulated app Close buttons
-            root.findViewById<View>(R.id.btnBrowserClose)?.setOnClickListener {
-                closeSimulatedApps()
-            }
-            root.findViewById<View>(R.id.btnNotesClose)?.setOnClickListener {
-                closeSimulatedApps()
-            }
-            root.findViewById<View>(R.id.btnMapClose)?.setOnClickListener {
-                closeSimulatedApps()
-            }
-
-            // Bind click listeners for floating Navbar back & home buttons
-            root.findViewById<View>(R.id.btnExtNavBack).setOnClickListener {
-                closeSimulatedApps()
-            }
-            root.findViewById<View>(R.id.btnExtNavHome).setOnClickListener {
-                closeSimulatedApps()
-            }
-
-            // Bind click listeners for context menu items
-            root.findViewById<View>(R.id.tvContextBack).setOnClickListener {
-                simContextMenu?.visibility = View.GONE
-                closeSimulatedApps()
-            }
-            root.findViewById<View>(R.id.tvContextHome).setOnClickListener {
-                simContextMenu?.visibility = View.GONE
-                closeSimulatedApps()
-            }
-
-            // Setup direct launch bridge for Simulation Mode
-            InteractionBridge.appLaunchListener = { packageName ->
-                launchSimulatedApp(packageName)
-            }
-        }
-    }
-
-    private fun moveSimulatedCursor(dx: Float, dy: Float) {
-        simRoot?.let { root ->
-            val scaleFactor = 1.2f // Accelerate coordinates mapping
-            simCursorX = (simCursorX + dx * scaleFactor).coerceIn(0f, root.width.toFloat())
-            simCursorY = (simCursorY + dy * scaleFactor).coerceIn(0f, root.height.toFloat())
-
-            simCursor?.x = simCursorX - simCursor!!.width / 2f
-            simCursor?.y = simCursorY - simCursor!!.height / 2f
-        }
-    }
-
-    private fun triggerSimulatedClick() {
-        simRoot?.let { root ->
-            // Click visual effect (Ripple)
-            val ripple = root.findViewById<View>(R.id.viewCursorRipple)
-            ripple.x = simCursorX - dpToPx(20)
-            ripple.y = simCursorY - dpToPx(20)
-            ripple.alpha = 0.8f
-            ripple.animate().alpha(0f).scaleX(1.5f).scaleY(1.5f).setDuration(200).withEndAction {
-                ripple.scaleX = 1f
-                ripple.scaleY = 1f
-            }.start()
-
-            // Dismiss context menu if clicking outside
-            if (simContextMenu?.visibility == View.VISIBLE) {
-                if (!isPointInsideView(simCursorX, simCursorY, simContextMenu!!)) {
-                    simContextMenu?.visibility = View.GONE
-                    return
-                }
-            }
-
-            // Inject native touch event to simulated container at cursor coordinates
-            injectSimulatedTouchEvent(simCursorX, simCursorY)
-        }
-    }
-
-    private fun injectSimulatedTouchEvent(x: Float, y: Float) {
-        simRoot?.let { root ->
-            val downTime = SystemClock.uptimeMillis()
-            val eventTime = SystemClock.uptimeMillis()
-            
-            // dispatchTouchEvent expects coordinates relative to the view it's dispatched on, which is x, y
-            val properties = arrayOf(MotionEvent.PointerProperties().apply {
-                id = 0
-                toolType = MotionEvent.TOOL_TYPE_FINGER
-            })
-            val coords = arrayOf(MotionEvent.PointerCoords().apply {
-                this.x = x
-                this.y = y
-                pressure = 1f
-                size = 1f
-            })
-
-            val downEvent = MotionEvent.obtain(
-                downTime, eventTime,
-                MotionEvent.ACTION_DOWN, 1, properties, coords,
-                0, 0, 1.0f, 1.0f, 0, 0, 0, 0
-            )
-            val upEvent = MotionEvent.obtain(
-                downTime, eventTime + 30,
-                MotionEvent.ACTION_UP, 1, properties, coords,
-                0, 0, 1.0f, 1.0f, 0, 0, 0, 0
-            )
-
-            root.dispatchTouchEvent(downEvent)
-            root.dispatchTouchEvent(upEvent)
-            
-            downEvent.recycle()
-            upEvent.recycle()
-        }
-    }
-
-    private fun triggerSimulatedRightClick() {
-        simRoot?.let { root ->
-            simContextMenu?.let { menu ->
-                menu.x = simCursorX.coerceAtMost((root.width - menu.width).toFloat())
-                menu.y = simCursorY.coerceAtMost((root.height - menu.height).toFloat())
-                menu.visibility = View.VISIBLE
-            }
-        }
-    }
-
-    private fun handleSimulatedScroll(dy: Float) {
-        // Scroll simulated browser if visible, otherwise scroll grid launcher
-        if (simBrowserApp?.visibility == View.VISIBLE) {
-            val scroller = simRoot?.findViewById<View>(R.id.browserScrollView)
-            scroller?.scrollBy(0, -dy.toInt())
-        } else if (simGrid?.visibility == View.VISIBLE) {
-            simGrid?.scrollBy(0, -dy.toInt())
-        }
-    }
-
-    private fun filterSimulatedApps(query: String) {
-        val filtered = allApps.filter { it.label.contains(query, ignoreCase = true) }
-        simAppAdapter?.updateData(filtered)
-    }
-
-    private fun launchSimulatedApp(packageName: String) {
-        val app = allApps.find { it.packageName == packageName }
-        if (app != null && app.isLocked) {
-            showProUpgradeDialog()
-            return
-        }
-        simAppContainer?.visibility = View.VISIBLE
-        simExtNavBar?.visibility = View.VISIBLE
-        closeSimulatedApps(keepNavBar = true)
-        
-        // Simulating launch of specific apps
-        val nameLower = packageName.lowercase()
-        if (nameLower.contains("map") || nameLower.hashCode() % 3 == 0) {
-            simMapApp?.visibility = View.VISIBLE
-            simMapZoomLevel = 1.0f
-            updateSimulatedMapZoomText()
-        } else if (nameLower.contains("chrome") || nameLower.contains("browser") || nameLower.contains("web") || nameLower.hashCode() % 2 == 0) {
-            simBrowserApp?.visibility = View.VISIBLE
-            simRoot?.findViewById<Button>(R.id.btnBrowserClickMe)?.setOnClickListener {
-                Toast.makeText(this, "Simulated Web Link Clicked!", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            simNotesApp?.visibility = View.VISIBLE
-            simNotesArea?.requestFocus()
-        }
-        
-        simContextMenu?.visibility = View.GONE
-    }
-
-    private fun closeSimulatedApps(keepNavBar: Boolean = false) {
-        simBrowserApp?.visibility = View.GONE
-        simNotesApp?.visibility = View.GONE
-        simMapApp?.visibility = View.GONE
-        if (!keepNavBar) {
-            simAppContainer?.visibility = View.GONE
-            simExtNavBar?.visibility = View.GONE
-        }
-        simContextMenu?.visibility = View.GONE
-    }
-
-    private fun updateSimulatedMapZoomText() {
-        simMapCoords?.text = "SATELLITE POSITION: SECTOR 4-B\nZoom Level: ${String.format("%.1fx", simMapZoomLevel)}"
-    }
-
-    private fun handleSimulatedZoom(isZoomIn: Boolean) {
-        if (simMapApp?.visibility == View.VISIBLE) {
-            if (isZoomIn) {
-                simMapZoomLevel = (simMapZoomLevel + 0.2f).coerceAtMost(3.0f)
-            } else {
-                simMapZoomLevel = (simMapZoomLevel - 0.2f).coerceAtLeast(0.5f)
-            }
-            updateSimulatedMapZoomText()
-        }
-    }
-
     private fun checkAndShowDonationPrompt() {
         if (BuildConfig.FLAVOR == "playstore") return
         val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
@@ -1245,16 +942,6 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun isPointInsideView(x: Float, y: Float, view: View): Boolean {
-        val location = IntArray(2)
-        view.getLocationOnScreen(location)
-        val rootLocation = IntArray(2)
-        simRoot?.getLocationOnScreen(rootLocation)
-        val rx = location[0] - rootLocation[0]
-        val ry = location[1] - rootLocation[1]
-        return x >= rx && x <= rx + view.width && y >= ry && y <= ry + view.height
-    }
-
     private fun performLeftClick() {
         val service = ControllerAccessibilityService.instance
         if (externalDisplayId != -1 && service != null) {
@@ -1262,16 +949,10 @@ class MainActivity : AppCompatActivity() {
         } else {
             InteractionBridge.sendClick()
         }
-        if (isSimulating) {
-            triggerSimulatedClick()
-        }
     }
 
     private fun performRightClick() {
         InteractionBridge.sendRightClick()
-        if (isSimulating) {
-            triggerSimulatedRightClick()
-        }
     }
 
     private fun saveListsToPreferences() {
@@ -1332,7 +1013,6 @@ class MainActivity : AppCompatActivity() {
 
         // Update adapter data
         appAdapter.updateData(sortedApps)
-        simAppAdapter?.updateData(sortedApps)
     }
 
     private fun toggleAppFavourite(app: AppInfo) {
@@ -1397,7 +1077,6 @@ class MainActivity : AppCompatActivity() {
         val runnable = object : Runnable {
             override fun run() {
                 InteractionBridge.sendZoom(isZoomIn)
-                if (isSimulating) handleSimulatedZoom(isZoomIn)
                 val service = ControllerAccessibilityService.instance
                 if (externalDisplayId != -1 && service != null) {
                     service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, isZoomIn)
@@ -1489,37 +1168,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyOrientationLayout() {
-        val orientation = resources.configuration.orientation
         val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
         val controllerPanel = findViewById<View>(R.id.controllerPanel)
-        val simulationContainer = findViewById<View>(R.id.simulationContainer)
-
         val cpParams = controllerPanel.layoutParams as LinearLayout.LayoutParams
-        val simParams = simulationContainer.layoutParams as LinearLayout.LayoutParams
-
-        if (orientation == Configuration.ORIENTATION_PORTRAIT) {
-            rootLayout.orientation = LinearLayout.VERTICAL
-            
-            cpParams.width = LinearLayout.LayoutParams.MATCH_PARENT
-            cpParams.height = 0
-            cpParams.weight = 1f
-            
-            simParams.width = LinearLayout.LayoutParams.MATCH_PARENT
-            simParams.height = 0
-            simParams.weight = 1f
-        } else {
-            rootLayout.orientation = LinearLayout.HORIZONTAL
-            
-            cpParams.width = 0
-            cpParams.height = LinearLayout.LayoutParams.MATCH_PARENT
-            cpParams.weight = 1f
-            
-            simParams.width = 0
-            simParams.height = LinearLayout.LayoutParams.MATCH_PARENT
-            simParams.weight = 1.3f
-        }
+        cpParams.width = LinearLayout.LayoutParams.MATCH_PARENT
+        cpParams.height = LinearLayout.LayoutParams.MATCH_PARENT
+        cpParams.weight = 1f
         controllerPanel.layoutParams = cpParams
-        simulationContainer.layoutParams = simParams
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

@@ -121,19 +121,6 @@
                             android:text="No physical external display found."
                             android:textColor="@color/text_primary"
                             android:textSize="13sp" />
-
-                        <Button
-                            android:id="@+id/btnSimulate"
-                            android:layout_width="match_parent"
-                            android:layout_height="40dp"
-                            android:layout_marginTop="12dp"
-                            android:backgroundTint="@color/neon_violet"
-                            android:text="SIMULATE GLASSES"
-                            android:textColor="@color/text_primary"
-                            android:textSize="12sp"
-                            android:paddingHorizontal="16dp"
-                            android:paddingVertical="0dp"
-                            app:cornerRadius="8dp" />
                     </LinearLayout>
                 </androidx.cardview.widget.CardView>
 
@@ -541,7 +528,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center"
-                        android:text="TRACKPAD MODE INACTIVE\nConnect glasses or enable simulation"
+                        android:text="TRACKPAD MODE INACTIVE\nConnect your XR glasses or external screen"
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp"
                         android:gravity="center"
@@ -752,15 +739,5 @@
                 android:lineSpacingExtra="4dp"/>
         </FrameLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <!-- Right Side / Bottom: Virtual Glasses Display Simulator -->
-    <FrameLayout
-        android:id="@+id/simulationContainer"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1.3"
-        android:layout_margin="16dp"
-        android:background="@drawable/bg_glass_card"
-        android:visibility="gone"/>
 
 </LinearLayout>
