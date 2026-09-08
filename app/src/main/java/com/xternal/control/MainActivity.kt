@@ -3,6 +3,8 @@ package com.xternal.control
 import android.app.ActivityOptions
 import android.content.Context
 import android.content.Intent
+import com.xternal.control.billing.BillingManager
+import com.xternal.control.billing.BillingManagerProvider
 import android.content.pm.PackageManager
 import android.hardware.display.DisplayManager
 import android.net.Uri
@@ -72,6 +74,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvTrackpadInstruction: View
     private lateinit var viewCursorMirror: View
     private lateinit var btnDonate: Button
+    private lateinit var billingManager: BillingManager
     private var backPressedTime = 0L
 
     // Recycler Adapter
@@ -143,6 +146,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        billingManager = BillingManagerProvider.getInstance(this)
         setContentView(R.layout.activity_main)
 
         // Initialize display manager
@@ -156,6 +160,13 @@ class MainActivity : AppCompatActivity() {
         initViews()
         applyOrientationLayout()
         loadInstalledApps()
+
+        billingManager.initialize {
+            updateProUi()
+            applyPlayStoreAppRestrictions()
+            sortAndRefreshAppLists()
+        }
+
         checkExternalDisplays()
         setupDisplayListener()
         setupTrackpad()
@@ -199,15 +210,7 @@ class MainActivity : AppCompatActivity() {
         btnToggleCursor = findViewById(R.id.btnToggleCursor)
 
         btnDonate = findViewById(R.id.btnDonate)
-        val cardDonation = findViewById<View>(R.id.cardDonation)
-        if (BuildConfig.FLAVOR == "playstore") {
-            cardDonation.visibility = View.GONE
-        } else {
-            btnDonate.setOnClickListener {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/akworkshop"))
-                startActivity(intent)
-            }
-        }
+        updateProUi()
 
         tabLayout = findViewById(R.id.controllerTabLayout)
         tabSetupContainer = findViewById(R.id.tabSetupContainer)
@@ -1015,17 +1018,17 @@ class MainActivity : AppCompatActivity() {
         appAdapter.updateData(sortedApps)
     }
 
+    private fun isProActive(): Boolean {
+        return if (::billingManager.isInitialized) billingManager.isProActive() else (BuildConfig.FLAVOR != "playstore")
+    }
+
     private fun toggleAppFavourite(app: AppInfo) {
         if (favouritePackages.contains(app.packageName)) {
             favouritePackages.remove(app.packageName)
             Toast.makeText(this, "${app.label} removed from Favourites", Toast.LENGTH_SHORT).show()
         } else {
-            if (BuildConfig.FLAVOR == "playstore" && favouritePackages.size >= 3) {
-                com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                    .setTitle("Pro Feature")
-                    .setMessage("Adding more than 3 favorite apps is a Pro feature.\n\nIn-app purchases are coming soon to unlock unlimited favorites!")
-                    .setPositiveButton("OK", null)
-                    .show()
+            if (!isProActive() && favouritePackages.size >= BillingManager.FREE_MAX_FAVOURITES) {
+                showProUpgradeDialog("Free version is limited to ${BillingManager.FREE_MAX_FAVOURITES} favourite apps.\n\nUpgrade to Pro (Lifetime) for unlimited pinned favourites!")
                 return
             }
             favouritePackages.add(app.packageName)
@@ -1036,7 +1039,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyPlayStoreAppRestrictions() {
-        if (BuildConfig.FLAVOR != "playstore") return
+        if (BuildConfig.FLAVOR != "playstore") {
+            for (app in allApps) {
+                app.isLocked = false
+            }
+            return
+        }
+
+        if (isProActive()) {
+            for (app in allApps) {
+                app.isLocked = false
+            }
+            return
+        }
 
         val preferredPackages = listOf(
             "com.google.android.youtube",
@@ -1064,12 +1079,73 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showProUpgradeDialog() {
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("Pro Feature")
-            .setMessage("Launching this app is a Pro feature.\n\nIn-app purchases are coming soon to unlock unlimited apps!")
-            .setPositiveButton("OK", null)
-            .show()
+    private fun showProUpgradeDialog(
+        message: String = "Launching this app is a Pro feature.\n\nUpgrade to Pro (Lifetime) to unlock all installed apps and unlimited favourites!"
+    ) {
+        if (BuildConfig.FLAVOR == "playstore") {
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("Xternal Control Pro")
+                .setMessage(message)
+                .setPositiveButton("⚡ Upgrade to Pro") { _, _ ->
+                    if (::billingManager.isInitialized) billingManager.purchasePro(this)
+                }
+                .setNegativeButton("Maybe Later", null)
+                .setNeutralButton("Restore") { _, _ ->
+                    if (::billingManager.isInitialized) billingManager.restorePurchases(this)
+                }
+                .show()
+        } else {
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun updateProUi() {
+        val cardDonation = findViewById<View>(R.id.cardDonation) ?: return
+        val tvDonationHeader = findViewById<TextView>(R.id.tvDonationHeader) ?: return
+        val tvDonationMsg = findViewById<TextView>(R.id.tvDonationMsg) ?: return
+        val btnDonate = findViewById<Button>(R.id.btnDonate) ?: return
+        val btnRestorePurchase = findViewById<TextView>(R.id.btnRestorePurchase)
+
+        cardDonation.visibility = View.VISIBLE
+        if (BuildConfig.FLAVOR == "playstore") {
+            if (isProActive()) {
+                tvDonationHeader.text = "★ XTERNAL CONTROL PRO ACTIVE"
+                tvDonationHeader.setTextColor(ContextCompat.getColor(this, R.color.neon_cyan))
+                tvDonationMsg.text = "Lifetime Pro is active on this device. All installed apps and unlimited favourites are fully unlocked. Thank you for your support!"
+                btnDonate.text = "✓ PRO LIFETIME ACTIVE"
+                btnDonate.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_cyan)
+                btnDonate.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
+                btnDonate.isEnabled = false
+                btnRestorePurchase?.visibility = View.GONE
+            } else {
+                tvDonationHeader.text = "★ UPGRADE TO PRO (LIFETIME)"
+                tvDonationHeader.setTextColor(ContextCompat.getColor(this, R.color.neon_cyan))
+                tvDonationMsg.text = "Unlock all installed apps and unlimited pinned favourites on your external display. One-time payment, lifetime access!"
+                btnDonate.text = "⚡ UNLOCK PRO (LIFETIME)"
+                btnDonate.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
+                btnDonate.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
+                btnDonate.isEnabled = true
+                btnDonate.setOnClickListener {
+                    if (::billingManager.isInitialized) billingManager.purchasePro(this)
+                }
+                btnRestorePurchase?.visibility = View.VISIBLE
+                btnRestorePurchase?.setOnClickListener {
+                    if (::billingManager.isInitialized) billingManager.restorePurchases(this)
+                }
+            }
+        } else {
+            tvDonationHeader.text = "SUPPORT THE CREATOR"
+            tvDonationMsg.text = "If you find this app useful, please consider supporting the creator. Your contributions help my family with our special needs child. Thank you so much!"
+            btnDonate.text = "☕ BUY ME A COFFEE"
+            btnDonate.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
+            btnDonate.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
+            btnDonate.isEnabled = true
+            btnDonate.setOnClickListener {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/akworkshop"))
+                startActivity(intent)
+            }
+            btnRestorePurchase?.visibility = View.GONE
+        }
     }
 
     private fun startContinuousZoom(isZoomIn: Boolean) {
@@ -1168,7 +1244,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyOrientationLayout() {
-        val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
         val controllerPanel = findViewById<View>(R.id.controllerPanel)
         val cpParams = controllerPanel.layoutParams as LinearLayout.LayoutParams
         cpParams.width = LinearLayout.LayoutParams.MATCH_PARENT
@@ -1297,6 +1372,21 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "Failed to save screenshot: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent?.getBooleanExtra("EXTRA_TRIGGER_PURCHASE", false) == true) {
+            showProUpgradeDialog()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (::billingManager.isInitialized) {
+            billingManager.destroy()
         }
     }
 }

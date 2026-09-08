@@ -4,6 +4,8 @@ import android.app.ActivityOptions
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import com.xternal.control.billing.BillingManager
+import com.xternal.control.billing.BillingManagerProvider
 import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -53,6 +55,7 @@ class ExternalActivity : AppCompatActivity() {
     private lateinit var desktopAdapter: DesktopIconsAdapter
     private lateinit var cardDesktopSupport: View
     private lateinit var btnBuyMeCoffee: View
+    private lateinit var billingManager: BillingManager
 
     // Start Menu Elements
     private lateinit var layoutStartMenu: View
@@ -113,12 +116,20 @@ class ExternalActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        billingManager = BillingManagerProvider.getInstance(this)
         setContentView(R.layout.activity_external)
 
         loadListsFromPreferences()
         initViews()
         tryEnableHighestResolution()
         loadInstalledApps()
+
+        billingManager.initialize {
+            updateDesktopSupportCard()
+            applyPlayStoreAppRestrictions()
+            sortAndRefreshAppLists()
+        }
+
         setupInteractionBridge()
         setupSharedPreferencesListener()
     }
@@ -127,6 +138,9 @@ class ExternalActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
         sharedPrefsListener?.let { prefs.unregisterOnSharedPreferenceChangeListener(it) }
         systemTrayHandler.removeCallbacks(systemTrayRunnable)
+        if (::billingManager.isInitialized) {
+            billingManager.destroy()
+        }
         super.onDestroy()
     }
 
@@ -142,6 +156,8 @@ class ExternalActivity : AppCompatActivity() {
         }
         systemTrayHandler.post(systemTrayRunnable)
         loadListsFromPreferences()
+        updateDesktopSupportCard()
+        applyPlayStoreAppRestrictions()
         sortAndRefreshAppLists()
         if (!isPipMode) {
             applyBackgroundTheme()
@@ -163,19 +179,7 @@ class ExternalActivity : AppCompatActivity() {
         cardDesktopSupport = findViewById(R.id.cardDesktopSupport)
         btnBuyMeCoffee = findViewById(R.id.btnBuyMeCoffee)
 
-        if (BuildConfig.FLAVOR == "github") {
-            cardDesktopSupport.visibility = View.VISIBLE
-            btnBuyMeCoffee.setOnClickListener {
-                try {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/akworkshop"))
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        } else {
-            cardDesktopSupport.visibility = View.GONE
-        }
+        updateDesktopSupportCard()
 
         // Start Menu
         layoutStartMenu = findViewById(R.id.layoutStartMenu)
@@ -330,6 +334,7 @@ class ExternalActivity : AppCompatActivity() {
         }
 
         allApps = appList
+        applyPlayStoreAppRestrictions()
 
         // 1. Desktop Icons Adapter: Arranges in columns from top to bottom, wrapping to multiple columns horizontally
         desktopAdapter = DesktopIconsAdapter(
@@ -364,7 +369,92 @@ class ExternalActivity : AppCompatActivity() {
         sortAndRefreshAppLists()
     }
 
+    private fun isProActive(): Boolean {
+        return if (::billingManager.isInitialized) billingManager.isProActive() else (BuildConfig.FLAVOR != "playstore")
+    }
+
+    private fun updateDesktopSupportCard() {
+        val card = findViewById<View>(R.id.cardDesktopSupport) ?: return
+        val btn = findViewById<View>(R.id.btnBuyMeCoffee) ?: return
+
+        if (BuildConfig.FLAVOR == "github") {
+            card.visibility = View.VISIBLE
+            btn.setOnClickListener {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/akworkshop"))
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        } else {
+            if (isProActive()) {
+                card.visibility = View.GONE
+            } else {
+                card.visibility = View.VISIBLE
+                val tvSupportMsg = findViewById<TextView>(R.id.tvSupportMsg)
+                val tvSupportBtnText = findViewById<TextView>(R.id.tvSupportBtnText)
+                tvSupportMsg?.text = "★ Unlock all apps & unlimited favourites with Pro!"
+                tvSupportBtnText?.text = "⚡ UNLOCK PRO"
+                btn.setOnClickListener {
+                    try {
+                        val intent = Intent(this, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            putExtra("EXTRA_TRIGGER_PURCHASE", true)
+                        }
+                        startActivity(intent)
+                        Toast.makeText(this, "Complete Pro purchase on your phone screen", Toast.LENGTH_LONG).show()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun applyPlayStoreAppRestrictions() {
+        if (BuildConfig.FLAVOR != "playstore") {
+            for (app in allApps) {
+                app.isLocked = false
+            }
+            return
+        }
+
+        if (isProActive()) {
+            for (app in allApps) {
+                app.isLocked = false
+            }
+            return
+        }
+
+        val preferredPackages = listOf(
+            "com.google.android.youtube",
+            "com.android.chrome",
+            "com.google.android.apps.maps",
+            "org.mozilla.firefox",
+            "com.google.android.googlequicksearchbox",
+            "com.android.settings"
+        )
+
+        val allowedPackages = allApps.filter { app ->
+            preferredPackages.contains(app.packageName)
+        }.map { it.packageName }.toMutableSet()
+
+        if (allowedPackages.size < 4) {
+            val otherApps = allApps.filter { !allowedPackages.contains(it.packageName) }
+            for (app in otherApps) {
+                if (allowedPackages.size >= 4) break
+                allowedPackages.add(app.packageName)
+            }
+        }
+
+        for (app in allApps) {
+            app.isLocked = !allowedPackages.contains(app.packageName)
+        }
+    }
+
     private fun sortAndRefreshAppLists() {
+        applyPlayStoreAppRestrictions()
         val updatedApps = allApps.map { app ->
             app.copy(isFavourite = favouritePackages.contains(app.packageName))
         }
@@ -391,6 +481,10 @@ class ExternalActivity : AppCompatActivity() {
             favouritePackages.remove(pkg)
             Toast.makeText(this, "Unpinned from Desktop & Taskbar: ${app.label}", Toast.LENGTH_SHORT).show()
         } else {
+            if (!isProActive() && favouritePackages.size >= BillingManager.FREE_MAX_FAVOURITES) {
+                Toast.makeText(this, "Free version limited to ${BillingManager.FREE_MAX_FAVOURITES} pinned apps. Upgrade to Pro on your phone!", Toast.LENGTH_LONG).show()
+                return
+            }
             favouritePackages.add(pkg)
             Toast.makeText(this, "Pinned to Desktop & Taskbar: ${app.label}", Toast.LENGTH_SHORT).show()
         }
@@ -400,6 +494,14 @@ class ExternalActivity : AppCompatActivity() {
 
     private fun launchApp(packageName: String) {
         layoutStartMenu.visibility = View.GONE
+
+        if (!isProActive()) {
+            val targetApp = allApps.find { it.packageName == packageName }
+            if (targetApp != null && targetApp.isLocked) {
+                Toast.makeText(this, "App locked in Free version. Upgrade to Pro on your phone!", Toast.LENGTH_LONG).show()
+                return
+            }
+        }
 
         when (packageName) {
             "mock.browser" -> {
