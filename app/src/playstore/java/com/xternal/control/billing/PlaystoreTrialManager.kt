@@ -6,12 +6,16 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -40,7 +44,10 @@ class PlaystoreTrialManager(private val context: Context) {
         private const val KEY_TRIAL_EXPIRED_SHOWN = "play_trial_expired_dialog_shown"
         private const val KEY_TRIAL_TAMPERED = "play_trial_is_tampered"
 
-        private const val PERSISTENT_FILE_NAME = ".xt_trial_v1.dat"
+        // Public persistent filenames (valid in MediaStore - NO leading dots!)
+        private const val FILE_NAME_DOWNLOAD = "xt_license_v1.bin"
+        private const val FILE_NAME_DOCUMENTS = "xt_device_state.bin"
+
         private const val SECRET_SALT = "xternal_control_secure_trial_salt_2026_xrt"
     }
 
@@ -73,7 +80,6 @@ class PlaystoreTrialManager(private val context: Context) {
 
     @Synchronized
     private fun loadOrInitializeTrial() {
-        // 1. Check if already marked tampered
         if (prefs.getBoolean(KEY_TRIAL_TAMPERED, false)) {
             isTampered = true
             return
@@ -81,38 +87,42 @@ class PlaystoreTrialManager(private val context: Context) {
 
         val now = System.currentTimeMillis()
 
-        // 2. Read from local SharedPreferences
+        // 1. Read from SharedPreferences
         val localStart = prefs.getLong(KEY_TRIAL_START, 0L)
         val localLastSeen = prefs.getLong(KEY_TRIAL_LAST_SEEN, 0L)
 
-        // 3. Read from persistent external MediaStore (survives "Clear Data")
-        val persistentData = readPersistentTrialToken()
+        // 2. Read from persistent storages (MediaStore & Public Shared Folders)
+        val persistentTokens = readAllPersistentTrialTokens()
 
-        // Earliest known start time wins to prevent resetting
         var finalStart = 0L
         var finalLastSeen = 0L
 
-        if (localStart > 0L && persistentData != null) {
-            finalStart = minOf(localStart, persistentData.first)
-            finalLastSeen = maxOf(localLastSeen, persistentData.second)
-        } else if (localStart > 0L) {
-            finalStart = localStart
-            finalLastSeen = localLastSeen
-        } else if (persistentData != null) {
-            finalStart = persistentData.first
-            finalLastSeen = persistentData.second
-            Log.d(tag, "Recovered trial start time from persistent storage: $finalStart")
+        val allStarts = mutableListOf<Long>()
+        val allLastSeens = mutableListOf<Long>()
+
+        if (localStart > 0L) {
+            allStarts.add(localStart)
+            allLastSeens.add(localLastSeen)
         }
 
-        // 4. If no previous record found anywhere, this is the very first install!
-        if (finalStart == 0L) {
+        for (token in persistentTokens) {
+            allStarts.add(token.first)
+            allLastSeens.add(token.second)
+        }
+
+        if (allStarts.isNotEmpty()) {
+            // The earliest start time ever recorded across any storage layer wins
+            finalStart = allStarts.minOrNull() ?: now
+            finalLastSeen = allLastSeens.maxOrNull() ?: now
+            Log.d(tag, "Recovered trial state: start=$finalStart, lastSeen=$finalLastSeen (from ${allStarts.size} records)")
+        } else {
+            // First install ever
             finalStart = now
             finalLastSeen = now
-            Log.d(tag, "First run: initializing 2-day trial at $finalStart")
+            Log.d(tag, "First run: initializing 48h trial at $finalStart")
         }
 
-        // 5. Anti-Clock-Tampering Check:
-        // If current time is significantly before the last recorded time, the user rolled back their clock.
+        // 3. Anti-Clock-Tampering Check
         if (now < finalLastSeen - 60_000L) {
             Log.w(tag, "Clock rollback detected! now: $now, lastSeen: $finalLastSeen. Expiring trial.")
             isTampered = true
@@ -124,13 +134,14 @@ class PlaystoreTrialManager(private val context: Context) {
         trialStartTime = finalStart
         lastRecordedTime = finalLastSeen
 
-        // Save back to both SharedPreferences and Persistent storage
+        // Save back to SharedPreferences
         prefs.edit()
             .putLong(KEY_TRIAL_START, trialStartTime)
             .putLong(KEY_TRIAL_LAST_SEEN, lastRecordedTime)
             .apply()
 
-        writePersistentTrialToken(trialStartTime, lastRecordedTime)
+        // Persist to all storage locations
+        writeAllPersistentTrialTokens(trialStartTime, lastRecordedTime)
     }
 
     fun isTrialActive(): Boolean {
@@ -149,7 +160,7 @@ class PlaystoreTrialManager(private val context: Context) {
         if (now > lastRecordedTime + 30_000L) {
             lastRecordedTime = now
             prefs.edit().putLong(KEY_TRIAL_LAST_SEEN, now).apply()
-            writePersistentTrialToken(trialStartTime, now)
+            writeAllPersistentTrialTokens(trialStartTime, now)
         }
 
         val elapsed = now - trialStartTime
@@ -182,77 +193,121 @@ class PlaystoreTrialManager(private val context: Context) {
     }
 
     // ---------------------------------------------------------
-    // Persistent MediaStore Storage (Survives "Clear Data")
+    // Persistent Multi-Layer Storage (Survives "Clear Data")
     // ---------------------------------------------------------
 
-    private fun readPersistentTrialToken(): Pair<Long, Long>? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return null
+    private fun readAllPersistentTrialTokens(): List<Pair<Long, Long>> {
+        val results = mutableListOf<Pair<Long, Long>>()
+
+        // Location 1: MediaStore Downloads
+        readMediaStoreToken(MediaStore.Downloads.EXTERNAL_CONTENT_URI, FILE_NAME_DOWNLOAD)?.let {
+            results.add(it)
         }
+
+        // Location 2: MediaStore Files / Documents
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            readMediaStoreToken(MediaStore.Files.getContentUri("external"), FILE_NAME_DOCUMENTS)?.let {
+                results.add(it)
+            }
+        }
+
+        // Location 3: Direct File in Downloads
+        readDirectFileToken(Environment.DIRECTORY_DOWNLOADS, FILE_NAME_DOWNLOAD)?.let {
+            results.add(it)
+        }
+
+        // Location 4: Direct File in Documents
+        readDirectFileToken(Environment.DIRECTORY_DOCUMENTS, FILE_NAME_DOCUMENTS)?.let {
+            results.add(it)
+        }
+
+        // Location 5: Root sdcard path fallbacks
+        readDirectPathToken("/sdcard/Download/$FILE_NAME_DOWNLOAD")?.let { results.add(it) }
+        readDirectPathToken("/sdcard/Documents/$FILE_NAME_DOCUMENTS")?.let { results.add(it) }
+
+        return results
+    }
+
+    private fun writeAllPersistentTrialTokens(startTime: Long, lastSeen: Long) {
+        val payload = "$startTime:$lastSeen:${getDeviceId()}"
+        val signature = generateHmac(payload)
+        val content = "$payload:$signature"
+
+        // Location 1: MediaStore Downloads
+        writeMediaStoreToken(
+            baseUri = MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            fileName = FILE_NAME_DOWNLOAD,
+            relativePath = "Download/",
+            content = content
+        )
+
+        // Location 2: MediaStore Files in Documents
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            writeMediaStoreToken(
+                baseUri = MediaStore.Files.getContentUri("external"),
+                fileName = FILE_NAME_DOCUMENTS,
+                relativePath = "Documents/",
+                content = content
+            )
+        }
+
+        // Location 3: Direct File in Downloads
+        writeDirectFileToken(Environment.DIRECTORY_DOWNLOADS, FILE_NAME_DOWNLOAD, content)
+
+        // Location 4: Direct File in Documents
+        writeDirectFileToken(Environment.DIRECTORY_DOCUMENTS, FILE_NAME_DOCUMENTS, content)
+    }
+
+    // ---------------------------------------------------------
+    // MediaStore Helper
+    // ---------------------------------------------------------
+
+    private fun readMediaStoreToken(baseUri: Uri, fileName: String): Pair<Long, Long>? {
         return try {
-            val projection = arrayOf(MediaStore.Downloads._ID)
-            val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ?"
-            val selectionArgs = arrayOf(PERSISTENT_FILE_NAME)
+            val projection = arrayOf(MediaStore.MediaColumns._ID)
+            val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
+            val selectionArgs = arrayOf(fileName)
 
             val resolver = context.contentResolver
-            resolver.query(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                projection,
-                selection,
-                selectionArgs,
-                null
-            )?.use { cursor ->
+            resolver.query(baseUri, projection, selection, selectionArgs, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
-                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID))
-                    val fileUri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
+                    val fileUri = ContentUris.withAppendedId(baseUri, id)
                     resolver.openInputStream(fileUri)?.use { inputStream ->
                         parseToken(inputStream)
                     }
                 } else null
             }
         } catch (e: Exception) {
-            Log.w(tag, "Failed to read persistent trial token: ${e.message}")
             null
         }
     }
 
-    private fun writePersistentTrialToken(startTime: Long, lastSeen: Long) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return
-        }
+    private fun writeMediaStoreToken(baseUri: Uri, fileName: String, relativePath: String, content: String) {
         try {
             val resolver = context.contentResolver
-            val deviceId = getDeviceId()
-            val payload = "$startTime:$lastSeen:$deviceId"
-            val signature = generateHmac(payload)
-            val content = "$payload:$signature"
-
-            val projection = arrayOf(MediaStore.Downloads._ID)
-            val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ?"
-            val selectionArgs = arrayOf(PERSISTENT_FILE_NAME)
+            val projection = arrayOf(MediaStore.MediaColumns._ID)
+            val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
+            val selectionArgs = arrayOf(fileName)
 
             var targetUri: Uri? = null
 
-            resolver.query(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                projection,
-                selection,
-                selectionArgs,
-                null
-            )?.use { cursor ->
+            resolver.query(baseUri, projection, selection, selectionArgs, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
-                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID))
-                    targetUri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
+                    targetUri = ContentUris.withAppendedId(baseUri, id)
                 }
             }
 
             if (targetUri == null) {
                 val values = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, PERSISTENT_FILE_NAME)
-                    put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
-                    put(MediaStore.Downloads.RELATIVE_PATH, "Download/.xt_sys/")
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                    }
                 }
-                targetUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                targetUri = resolver.insert(baseUri, values)
             }
 
             targetUri?.let { uri ->
@@ -262,7 +317,54 @@ class PlaystoreTrialManager(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            Log.w(tag, "Failed to write persistent trial token: ${e.message}")
+            Log.w(tag, "MediaStore write failed for $fileName: ${e.message}")
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Direct File System Fallback
+    // ---------------------------------------------------------
+
+    private fun readDirectFileToken(directoryType: String, fileName: String): Pair<Long, Long>? {
+        return try {
+            val publicDir = Environment.getExternalStoragePublicDirectory(directoryType)
+            if (publicDir.exists()) {
+                val file = File(publicDir, fileName)
+                if (file.exists() && file.canRead()) {
+                    FileInputStream(file).use { parseToken(it) }
+                } else null
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun readDirectPathToken(absolutePath: String): Pair<Long, Long>? {
+        return try {
+            val file = File(absolutePath)
+            if (file.exists() && file.canRead()) {
+                FileInputStream(file).use { parseToken(it) }
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun writeDirectFileToken(directoryType: String, fileName: String, content: String) {
+        try {
+            val publicDir = Environment.getExternalStoragePublicDirectory(directoryType)
+            if (!publicDir.exists()) {
+                publicDir.mkdirs()
+            }
+            if (publicDir.exists() && publicDir.canWrite()) {
+                val file = File(publicDir, fileName)
+                FileOutputStream(file).use { fos ->
+                    fos.write(content.toByteArray(StandardCharsets.UTF_8))
+                    fos.flush()
+                }
+            }
+        } catch (e: Exception) {
+            // Expected on scoped storage if not permitted, safely ignored as MediaStore handles it
         }
     }
 
@@ -282,7 +384,7 @@ class PlaystoreTrialManager(private val context: Context) {
                 val deviceId = parts[2]
                 val expectedSignature = parts[3]
 
-                // Verify device ID matches this physical phone
+                // Verify device ID matches this physical device
                 if (deviceId != getDeviceId()) {
                     Log.w(tag, "Trial token device ID mismatch!")
                     return null
@@ -328,6 +430,7 @@ class PlaystoreTrialManager(private val context: Context) {
                             } else if (netTime - trialStartTime >= TRIAL_DURATION_MS) {
                                 Log.d(tag, "Network time confirms trial has expired.")
                                 prefs.edit().putLong(KEY_TRIAL_LAST_SEEN, netTime).apply()
+                                writeAllPersistentTrialTokens(trialStartTime, netTime)
                             }
                         }
                     }
