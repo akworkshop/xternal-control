@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.2.0-00E5FF?style=for-the-badge" alt="Version 1.2.0" />
+  <img src="https://img.shields.io/badge/Version-1.2.2-00E5FF?style=for-the-badge" alt="Version 1.2.2" />
   <img src="https://img.shields.io/badge/Platform-Android%208.0%2B-00E676?style=for-the-badge" alt="Android 8.0+" />
   <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License" />
   <img src="https://img.shields.io/badge/Samsung%20DeX-Not%20Required-FF6D00?style=for-the-badge" alt="No DeX Required" />
@@ -90,7 +90,7 @@ Because **Xternal Control** acts as a remote trackpad and launcher for external 
 
 ## 📲 Installation
 
-1. Download the latest release **[app-release-v1.2.0.apk](app-release-v1.2.0.apk)** from the [Releases](../../releases) page.
+1. Download the latest release **[app-release-v1.2.2.apk](app-release-v1.2.2.apk)** from the [Releases](../../releases) page.
 2. Install the APK on your Android device.
 3. Open **Xternal Control**, go to the **SETUP** tab, and toggle the required permissions:
    - Grant **System Overlay**.

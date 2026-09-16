@@ -35,6 +35,9 @@ import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -147,7 +150,28 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         billingManager = BillingManagerProvider.getInstance(this)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
+
+        val rootLayout = findViewById<View>(R.id.rootLayout)
+        val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        val defaultStatusBarHeight = if (resId > 0) resources.getDimensionPixelSize(resId) else 0
+        val isPortrait = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        if (isPortrait && defaultStatusBarHeight > 0) {
+            rootLayout.setPadding(0, defaultStatusBarHeight, 0, 0)
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { v, insets ->
+            val systemBars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val portraitNow = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+            val fallbackTop = if (portraitNow) defaultStatusBarHeight else 0
+            val top = if (systemBars.top > 0) systemBars.top else fallbackTop
+            v.setPadding(systemBars.left, top, systemBars.right, systemBars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(rootLayout)
 
         // Initialize display manager
         displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
@@ -165,6 +189,7 @@ class MainActivity : AppCompatActivity() {
             updateProUi()
             applyPlayStoreAppRestrictions()
             sortAndRefreshAppLists()
+            checkAndShowTrialExpiredDialog()
         }
 
         checkExternalDisplays()
@@ -190,6 +215,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         checkPermissions()
+        checkAndShowTrialExpiredDialog()
+        updateProUi()
     }
 
     private fun initViews() {
@@ -357,11 +384,9 @@ class MainActivity : AppCompatActivity() {
             startActivityForResult(intent, OVERLAY_PERMISSION_REQ_CODE)
         }
 
-        // Grant Accessibility Permission Click
+        // Grant Accessibility Permission Click with Google Play Prominent Disclosure
         btnGrantAccessibility.setOnClickListener {
-            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            startActivity(intent)
-            Toast.makeText(this, "Enable 'Xternal Control' service in the list", Toast.LENGTH_LONG).show()
+            showAccessibilityDisclosureDialog()
         }
 
         // Bind controller bottom navigation bar remote buttons
@@ -399,6 +424,29 @@ class MainActivity : AppCompatActivity() {
             findViewById<View>(android.R.id.content)?.pointerIcon = 
                 android.view.PointerIcon.getSystemIcon(this, android.view.PointerIcon.TYPE_NULL)
         }
+    }
+
+    private fun showAccessibilityDisclosureDialog() {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Accessibility Service Disclosure")
+            .setMessage(
+                "Xternal Control requires the AccessibilityServices API to provide remote control and navigation functionality for your connected external display (XR glasses, TV, or monitor).\n\n" +
+                "How this service is used:\n" +
+                "• Simulating cursor clicks, scrolling, and pinch-to-zoom gestures on external screens.\n" +
+                "• Performing system navigation (Back and Home) inside third-party apps on the external display.\n\n" +
+                "Data Safety & Privacy:\n" +
+                "• Xternal Control DOES NOT collect, store, transmit, or share any personal or sensitive user data.\n" +
+                "• No keystrokes, personal messages, or screen contents are monitored.\n" +
+                "• All input operations execute locally on your device."
+            )
+            .setPositiveButton("Agree & Enable") { _, _ ->
+                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                startActivity(intent)
+                Toast.makeText(this, "Find and enable 'Xternal Control' in the list", Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton("Deny", null)
+            .setCancelable(false)
+            .show()
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
@@ -1099,6 +1147,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkAndShowTrialExpiredDialog() {
+        if (BuildConfig.FLAVOR == "playstore" && ::billingManager.isInitialized) {
+            if (billingManager.shouldShowTrialExpiredDialog()) {
+                billingManager.markTrialExpiredDialogShown()
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                    .setTitle("Trial Version Expired")
+                    .setMessage("Your 2-day free trial of Xternal Control has ended. We hope you enjoyed the full desktop experience!\n\nUpgrade to Pro (Lifetime) to unlock unlimited apps and pinned favourites on your external display.")
+                    .setPositiveButton("⚡ Upgrade to Pro") { _, _ ->
+                        billingManager.purchasePro(this)
+                    }
+                    .setNegativeButton("Maybe Later", null)
+                    .setNeutralButton("Restore") { _, _ ->
+                        billingManager.restorePurchases(this)
+                    }
+                    .show()
+            }
+        }
+    }
+
     private fun updateProUi() {
         val cardDonation = findViewById<View>(R.id.cardDonation) ?: return
         val tvDonationHeader = findViewById<TextView>(R.id.tvDonationHeader) ?: return
@@ -1108,7 +1175,26 @@ class MainActivity : AppCompatActivity() {
 
         cardDonation.visibility = View.VISIBLE
         if (BuildConfig.FLAVOR == "playstore") {
-            if (isProActive()) {
+            val isTrial = ::billingManager.isInitialized && billingManager.isTrialActive()
+            val isExpired = ::billingManager.isInitialized && billingManager.isTrialExpired()
+
+            if (isTrial) {
+                val hours = billingManager.getTrialHoursRemaining()
+                tvDonationHeader.text = "⏱️ 2-DAY FREE TRIAL ACTIVE"
+                tvDonationHeader.setTextColor(ContextCompat.getColor(this, R.color.neon_cyan))
+                tvDonationMsg.text = "You have $hours hours left in your full-featured free trial! All installed apps and unlimited favourites are currently unlocked."
+                btnDonate.text = "⚡ UNLOCK PRO (LIFETIME)"
+                btnDonate.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
+                btnDonate.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
+                btnDonate.isEnabled = true
+                btnDonate.setOnClickListener {
+                    if (::billingManager.isInitialized) billingManager.purchasePro(this)
+                }
+                btnRestorePurchase?.visibility = View.VISIBLE
+                btnRestorePurchase?.setOnClickListener {
+                    if (::billingManager.isInitialized) billingManager.restorePurchases(this)
+                }
+            } else if (isProActive()) {
                 tvDonationHeader.text = "★ XTERNAL CONTROL PRO ACTIVE"
                 tvDonationHeader.setTextColor(ContextCompat.getColor(this, R.color.neon_cyan))
                 tvDonationMsg.text = "Lifetime Pro is active on this device. All installed apps and unlimited favourites are fully unlocked. Thank you for your support!"
@@ -1118,9 +1204,13 @@ class MainActivity : AppCompatActivity() {
                 btnDonate.isEnabled = false
                 btnRestorePurchase?.visibility = View.GONE
             } else {
-                tvDonationHeader.text = "★ UPGRADE TO PRO (LIFETIME)"
+                tvDonationHeader.text = if (isExpired) "★ TRIAL EXPIRED - UPGRADE TO PRO" else "★ UPGRADE TO PRO (LIFETIME)"
                 tvDonationHeader.setTextColor(ContextCompat.getColor(this, R.color.neon_cyan))
-                tvDonationMsg.text = "Unlock all installed apps and unlimited pinned favourites on your external display. One-time payment, lifetime access!"
+                tvDonationMsg.text = if (isExpired) {
+                    "Your 2-day free trial has expired. Upgrade to Pro (Lifetime) to unlock unlimited apps and pinned favourites on your external display!"
+                } else {
+                    "Unlock all installed apps and unlimited pinned favourites on your external display. One-time payment, lifetime access!"
+                }
                 btnDonate.text = "⚡ UNLOCK PRO (LIFETIME)"
                 btnDonate.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
                 btnDonate.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
@@ -1255,6 +1345,8 @@ class MainActivity : AppCompatActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         applyOrientationLayout()
+        val rootLayout = findViewById<View>(R.id.rootLayout)
+        ViewCompat.requestApplyInsets(rootLayout)
         
         // Update column count in apps grid
         val columns = if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) 3 else 5

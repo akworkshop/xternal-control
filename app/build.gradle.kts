@@ -8,14 +8,14 @@ plugins {
 
 android {
     namespace = "com.xternal.control"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.xternal.control"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 17
-        versionName = "1.2.0"
+        targetSdk = 36
+        versionCode = 19
+        versionName = "1.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -78,5 +78,5 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.cardview:cardview:1.0.0")
-    "playstoreImplementation"("com.android.billingclient:billing-ktx:6.2.1")
+    "playstoreImplementation"("com.android.billingclient:billing:8.0.0")
 }

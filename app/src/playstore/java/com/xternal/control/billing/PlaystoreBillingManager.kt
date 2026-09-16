@@ -19,20 +19,33 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
     private var proProductDetails: ProductDetails? = null
     private var statusCallback: ((Boolean) -> Unit)? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val trialManager = PlaystoreTrialManager(appContext)
 
     override fun initialize(onProStatusChanged: ((Boolean) -> Unit)?) {
         statusCallback = onProStatusChanged
 
         billingClient = BillingClient.newBuilder(appContext)
             .setListener(this)
-            .enablePendingPurchases()
+            .enablePendingPurchases(
+                PendingPurchasesParams.newBuilder()
+                    .enableOneTimeProducts()
+                    .build()
+            )
             .build()
 
-        connectToGooglePlay()
+        connectToGooglePlay(
+            onConnected = {
+                queryProductDetails()
+                queryActivePurchases()
+            }
+        )
     }
 
-    private fun connectToGooglePlay(onConnected: (() -> Unit)? = null) {
-        val client = billingClient ?: return
+    private fun connectToGooglePlay(onConnected: (() -> Unit)? = null, onError: ((String) -> Unit)? = null) {
+        val client = billingClient ?: run {
+            onError?.invoke("Billing client is null")
+            return
+        }
         if (client.isReady) {
             onConnected?.invoke()
             return
@@ -42,11 +55,11 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
             override fun onBillingSetupFinished(billingResult: BillingResult) {
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                     Log.d(tag, "Billing client connected successfully.")
-                    queryProductDetails()
-                    queryActivePurchases()
                     onConnected?.invoke()
                 } else {
-                    Log.w(tag, "Billing setup failed with code: ${billingResult.responseCode}")
+                    val msg = "Billing setup failed (${billingResult.responseCode}): ${billingResult.debugMessage}"
+                    Log.w(tag, msg)
+                    onError?.invoke(msg)
                 }
             }
 
@@ -56,9 +69,15 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
         })
     }
 
-    private fun queryProductDetails() {
-        val client = billingClient ?: return
-        if (!client.isReady) return
+    private fun queryProductDetails(onComplete: ((ProductDetails?, String?) -> Unit)? = null) {
+        val client = billingClient
+        if (client == null || !client.isReady) {
+            connectToGooglePlay(
+                onConnected = { queryProductDetails(onComplete) },
+                onError = { err -> onComplete?.invoke(null, err) }
+            )
+            return
+        }
 
         val productList = listOf(
             QueryProductDetailsParams.Product.newBuilder()
@@ -71,12 +90,23 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
             .setProductList(productList)
             .build()
 
-        client.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
+        client.queryProductDetailsAsync(params) { billingResult, queryProductDetailsResult ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                proProductDetails = productDetailsList.firstOrNull {
-                    it.productId == BillingManager.PRODUCT_ID_PRO
+                val list = queryProductDetailsResult.productDetailsList
+                val details = list.firstOrNull { it.productId == BillingManager.PRODUCT_ID_PRO }
+                proProductDetails = details
+                if (details != null) {
+                    Log.d(tag, "Product details loaded: ${details.name} - ${details.oneTimePurchaseOfferDetails?.formattedPrice}")
+                    onComplete?.invoke(details, null)
+                } else {
+                    val err = "Product '${BillingManager.PRODUCT_ID_PRO}' not found in Google Play (returned ${list.size} items). Verify that '${BillingManager.PRODUCT_ID_PRO}' is Active in Google Play Console."
+                    Log.w(tag, err)
+                    onComplete?.invoke(null, err)
                 }
-                Log.d(tag, "Product details loaded: ${proProductDetails?.name}")
+            } else {
+                val err = "Google Play query failed (${billingResult.responseCode}): ${billingResult.debugMessage}"
+                Log.e(tag, err)
+                onComplete?.invoke(null, err)
             }
         }
     }
@@ -105,34 +135,44 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
         }
     }
 
-    override fun isProActive(): Boolean {
+    fun isPurchasedPro(): Boolean {
         return prefs.getBoolean(BillingManager.KEY_IS_PRO, false)
     }
 
-    override fun purchasePro(activity: Activity) {
-        val client = billingClient
-        if (client == null || !client.isReady) {
-            connectToGooglePlay {
-                launchFlow(activity)
-            }
-        } else {
-            launchFlow(activity)
-        }
+    override fun isProActive(): Boolean {
+        return isPurchasedPro() || trialManager.isTrialActive()
     }
 
-    private fun launchFlow(activity: Activity) {
-        val details = proProductDetails
-        if (details == null) {
-            // Try querying again
-            queryProductDetails()
-            Toast.makeText(
-                activity,
-                "Connecting to Google Play Store... Please try again in a moment.",
-                Toast.LENGTH_SHORT
-            ).show()
+    override fun isTrialActive(): Boolean = !isPurchasedPro() && trialManager.isTrialActive()
+    override fun isTrialExpired(): Boolean = !isPurchasedPro() && trialManager.isTrialExpired()
+    override fun getTrialHoursRemaining(): Int = if (isPurchasedPro()) 0 else trialManager.getTrialHoursRemaining()
+    override fun shouldShowTrialExpiredDialog(): Boolean = !isPurchasedPro() && trialManager.shouldShowTrialExpiredDialog()
+    override fun markTrialExpiredDialogShown() = trialManager.markTrialExpiredDialogShown()
+
+    override fun purchasePro(activity: Activity) {
+        val cachedDetails = proProductDetails
+        if (cachedDetails != null) {
+            launchFlow(activity, cachedDetails)
             return
         }
 
+        Toast.makeText(activity, "Connecting to Google Play Store...", Toast.LENGTH_SHORT).show()
+        queryProductDetails { details, error ->
+            mainHandler.post {
+                if (details != null) {
+                    launchFlow(activity, details)
+                } else {
+                    Toast.makeText(
+                        activity,
+                        error ?: "Could not load product from Google Play. Please try again.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun launchFlow(activity: Activity, details: ProductDetails) {
         val productDetailsParamsList = listOf(
             BillingFlowParams.ProductDetailsParams.newBuilder()
                 .setProductDetails(details)
@@ -147,18 +187,46 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
     }
 
     override fun restorePurchases(activity: Activity?) {
-        connectToGooglePlay {
-            queryActivePurchases()
-            activity?.let { act ->
-                mainHandler.post {
-                    if (isProActive()) {
-                        Toast.makeText(act, "Pro license restored successfully!", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(act, "No previous Pro purchase found for this Google account.", Toast.LENGTH_LONG).show()
+        Toast.makeText(activity ?: appContext, "Checking purchase history...", Toast.LENGTH_SHORT).show()
+        connectToGooglePlay(
+            onConnected = {
+                val client = billingClient ?: return@connectToGooglePlay
+                val params = QueryPurchasesParams.newBuilder()
+                    .setProductType(BillingClient.ProductType.INAPP)
+                    .build()
+
+                client.queryPurchasesAsync(params) { billingResult, purchases ->
+                    var hasPro = false
+                    if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                        for (purchase in purchases) {
+                            if (purchase.products.contains(BillingManager.PRODUCT_ID_PRO) &&
+                                purchase.purchaseState == Purchase.PurchaseState.PURCHASED
+                            ) {
+                                hasPro = true
+                                handleAcknowledgeIfNeeded(purchase)
+                            }
+                        }
+                    }
+                    updateProStatus(hasPro)
+                    activity?.let { act ->
+                        mainHandler.post {
+                            if (hasPro) {
+                                Toast.makeText(act, "Pro license restored successfully!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(act, "No previous Pro purchase found for this Google account.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+            },
+            onError = { err ->
+                activity?.let { act ->
+                    mainHandler.post {
+                        Toast.makeText(act, "Google Play error: $err", Toast.LENGTH_LONG).show()
                     }
                 }
             }
-        }
+        )
     }
 
     override fun onPurchasesUpdated(billingResult: BillingResult, purchases: MutableList<Purchase>?) {

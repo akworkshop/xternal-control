@@ -9,6 +9,13 @@ interface BillingManager {
     fun restorePurchases(activity: Activity? = null)
     fun destroy()
 
+    // Trial state helpers
+    fun isTrialActive(): Boolean = false
+    fun isTrialExpired(): Boolean = false
+    fun getTrialHoursRemaining(): Int = 0
+    fun shouldShowTrialExpiredDialog(): Boolean = false
+    fun markTrialExpiredDialogShown() {}
+
     companion object {
         const val PRODUCT_ID_PRO = "xternal_pro_lifetime"
         const val PREFS_NAME = "XternalControlPrefs"

@@ -7,3 +7,10 @@ app/build/
 *.apk
 *.aab
 release.jks
+*.der
+*.pem
+*.cer
+*.crt
+*.p12
+*.jks
+adi-registration.properties
