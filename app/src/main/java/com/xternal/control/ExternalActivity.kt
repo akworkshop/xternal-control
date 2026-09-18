@@ -720,28 +720,35 @@ class ExternalActivity : AppCompatActivity() {
 
     private fun applyBackgroundTheme() {
         val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
-        val bgType = prefs.getString("glasses_bg_type", "color") ?: "color"
+        val bgType = prefs.getString("glasses_bg_type", "default") ?: "default"
 
-        if (bgType == "image") {
-            val wallpaperFile = File(filesDir, "glasses_wallpaper.png")
-            if (wallpaperFile.exists()) {
-                val bmp = android.graphics.BitmapFactory.decodeFile(wallpaperFile.absolutePath)
-                ivExtBackground.setImageBitmap(bmp)
-                ivExtBackground.visibility = View.VISIBLE
-            } else {
-                ivExtBackground.setImageResource(R.drawable.bg_trackpad_grid)
-                ivExtBackground.visibility = View.VISIBLE
+        when (bgType) {
+            "image" -> {
+                val wallpaperFile = File(filesDir, "glasses_wallpaper.png")
+                if (wallpaperFile.exists()) {
+                    val bmp = android.graphics.BitmapFactory.decodeFile(wallpaperFile.absolutePath)
+                    ivExtBackground.setImageBitmap(bmp)
+                    ivExtBackground.visibility = View.VISIBLE
+                } else {
+                    ivExtBackground.setImageResource(R.drawable.bg_default_wallpaper)
+                    ivExtBackground.visibility = View.VISIBLE
+                }
             }
-        } else {
-            val hex = prefs.getString("glasses_bg_color", "#0A0B10") ?: "#0A0B10"
-            try {
-                val parsedColor = Color.parseColor(hex)
-                ivExtBackground.setImageDrawable(null)
-                ivExtBackground.visibility = View.GONE
-                rootContainer.setBackgroundColor(parsedColor)
-            } catch (e: Exception) {
-                ivExtBackground.visibility = View.GONE
-                rootContainer.setBackgroundColor(Color.BLACK)
+            "color" -> {
+                val hex = prefs.getString("glasses_bg_color", "#0A0B10") ?: "#0A0B10"
+                try {
+                    val parsedColor = Color.parseColor(hex)
+                    ivExtBackground.setImageDrawable(null)
+                    ivExtBackground.visibility = View.GONE
+                    rootContainer.setBackgroundColor(parsedColor)
+                } catch (e: Exception) {
+                    ivExtBackground.visibility = View.GONE
+                    rootContainer.setBackgroundColor(Color.BLACK)
+                }
+            }
+            else -> {
+                ivExtBackground.setImageResource(R.drawable.bg_default_wallpaper)
+                ivExtBackground.visibility = View.VISIBLE
             }
         }
     }

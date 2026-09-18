@@ -14,8 +14,8 @@ android {
         applicationId = "com.xternal.control"
         minSdk = 26
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.2.3"
+        versionCode = 22
+        versionName = "1.2.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -79,4 +79,5 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.cardview:cardview:1.0.0")
     "playstoreImplementation"("com.android.billingclient:billing:8.0.0")
+    "playstoreImplementation"("com.android.installreferrer:installreferrer:2.2")
 }

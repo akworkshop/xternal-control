@@ -209,6 +209,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        checkAndShowOnboardingGuide()
         checkAndShowDonationPrompt()
     }
 
@@ -639,8 +640,6 @@ class MainActivity : AppCompatActivity() {
             tvStatusBadge.backgroundTintList = null
             tvConnectionInfo.text = "No physical external display found."
             deactivateTrackpadMode()
-            // Switch back to SETUP tab
-            tabLayout.getTabAt(0)?.select()
         }
     }
 
@@ -794,6 +793,8 @@ class MainActivity : AppCompatActivity() {
                     e.printStackTrace()
                 }
             }
+        } else {
+            Toast.makeText(this, "Connect glasses or external display to launch apps on secondary screen", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -990,6 +991,37 @@ class MainActivity : AppCompatActivity() {
                     .putBoolean("dont_show_donation", true)
                     .apply()
             }
+            .show()
+    }
+
+    private fun checkAndShowOnboardingGuide() {
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        val hasSeen = prefs.getBoolean("has_seen_onboarding_guide", false)
+        if (!hasSeen) {
+            showOnboardingGuideDialog()
+            prefs.edit().putBoolean("has_seen_onboarding_guide", true).apply()
+        }
+    }
+
+    private fun showOnboardingGuideDialog() {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("👓 Welcome to Xternal Control")
+            .setMessage(
+                "Quick Guide to Getting Started:\n\n" +
+                "1. Connect Display:\n" +
+                "Plug in your USB-C AR glasses or secondary screen.\n\n" +
+                "2. Grant Permissions:\n" +
+                "Enable 'Display Over Other Apps' & 'Accessibility' in the SETUP tab for full cursor control.\n\n" +
+                "3. Pin Favorites (APPS Tab):\n" +
+                "Browse your apps and tap the ⭐ star icon (or long-press) to pin your favorite apps for quick access.\n\n" +
+                "4. Remote Trackpad (REMOTE Tab):\n" +
+                "• 1-Finger Drag: Move desktop cursor\n" +
+                "• 1-Finger Tap: Click / open app\n" +
+                "• 2-Finger Drag: Smooth scrolling\n" +
+                "• Slider: Fast zoom & page navigation\n\n" +
+                "Enjoy your secondary AR desktop experience!"
+            )
+            .setPositiveButton("Got It!", null)
             .show()
     }
 
@@ -1433,7 +1465,15 @@ class MainActivity : AppCompatActivity() {
             if (wallpaperFile.exists()) {
                 wallpaperFile.delete()
             }
-            setGlassesBackgroundColor("#000000", "OLED Black (Image Cleared)")
+            val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("glasses_bg_type", "default")
+                .apply()
+            Toast.makeText(this, "Reset to Default Wallpaper", Toast.LENGTH_SHORT).show()
+        }
+
+        findViewById<View>(R.id.btnQuickGuide)?.setOnClickListener {
+            showOnboardingGuideDialog()
         }
     }
 

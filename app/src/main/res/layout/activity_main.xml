@@ -121,6 +121,18 @@
                             android:text="No physical external display found."
                             android:textColor="@color/text_primary"
                             android:textSize="13sp" />
+
+                        <Button
+                            android:id="@+id/btnQuickGuide"
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:layout_marginTop="10dp"
+                            android:text="📖 HOW TO USE / QUICK GUIDE"
+                            android:textColor="@color/text_primary"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="@color/bg_card"
+                            app:cornerRadius="8dp" />
                     </LinearLayout>
                 </androidx.cardview.widget.CardView>
 
@@ -365,7 +377,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="34dp"
                                 android:layout_marginStart="6dp"
-                                android:text="❌ CLEAR IMAGE"
+                                android:text="🖼️ DEFAULT WALLPAPER"
                                 android:textSize="10sp"
                                 android:backgroundTint="@color/bg_card"
                                 android:textColor="@color/text_secondary"

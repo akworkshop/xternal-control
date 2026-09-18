@@ -67,6 +67,9 @@ class AppListAdapter(
         }
         
         holder.ivFavIndicator?.visibility = if (app.isFavourite) View.VISIBLE else View.GONE
+        holder.ivFavIndicator?.setOnClickListener {
+            onItemLongClick?.invoke(app)
+        }
     }
 
     override fun getItemCount(): Int = apps.size
