@@ -698,7 +698,12 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     overlayCursorView = ImageView(displayContext).apply {
-                        setImageResource(R.drawable.bg_cursor)
+                        val cursorDrawable = ContextCompat.getDrawable(this@MainActivity, R.drawable.bg_cursor)
+                        if (cursorDrawable != null) {
+                            setImageDrawable(cursorDrawable)
+                        } else {
+                            setImageResource(R.drawable.bg_cursor)
+                        }
                     }
 
                     overlayParams = WindowManager.LayoutParams(
@@ -708,8 +713,7 @@ class MainActivity : AppCompatActivity() {
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                                WindowManager.LayoutParams.FLAG_SECURE,
+                                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                         PixelFormat.TRANSLUCENT
                     ).apply {
                         gravity = Gravity.TOP or Gravity.START

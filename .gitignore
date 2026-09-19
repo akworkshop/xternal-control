@@ -14,3 +14,4 @@ release.jks
 *.p12
 *.jks
 adi-registration.properties
+*.zip
