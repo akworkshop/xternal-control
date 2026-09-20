@@ -1008,25 +1008,71 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showOnboardingGuideDialog() {
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("👓 Welcome to Xternal Control")
-            .setMessage(
-                "Quick Guide to Getting Started:\n\n" +
-                "1. Connect Display:\n" +
-                "Plug in your USB-C AR glasses or secondary screen.\n\n" +
-                "2. Grant Permissions:\n" +
-                "Enable 'Display Over Other Apps' & 'Accessibility' in the SETUP tab for full cursor control.\n\n" +
-                "3. Pin Favorites (APPS Tab):\n" +
-                "Browse your apps and tap the ⭐ star icon (or long-press) to pin your favorite apps for quick access.\n\n" +
-                "4. Remote Trackpad (REMOTE Tab):\n" +
-                "• 1-Finger Drag: Move desktop cursor\n" +
-                "• 1-Finger Tap: Click / open app\n" +
-                "• 2-Finger Drag: Smooth scrolling\n" +
-                "• Slider: Fast zoom & page navigation\n\n" +
-                "Enjoy your secondary AR desktop experience!"
-            )
-            .setPositiveButton("Got It!", null)
-            .show()
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_quick_guide, null)
+        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val tvHeaderSubtitle = dialogView.findViewById<TextView>(R.id.tvGuideHeaderSubtitle)
+        val btnClose = dialogView.findViewById<View>(R.id.btnGuideClose)
+        val btnPrev = dialogView.findViewById<android.widget.Button>(R.id.btnGuidePrev)
+        val btnNext = dialogView.findViewById<android.widget.Button>(R.id.btnGuideNext)
+        val tvPageDots = dialogView.findViewById<TextView>(R.id.tvGuidePageDots)
+
+        val page1 = dialogView.findViewById<View>(R.id.layoutPage1)
+        val page2 = dialogView.findViewById<View>(R.id.layoutPage2)
+        val page3 = dialogView.findViewById<View>(R.id.layoutPage3)
+        val page4 = dialogView.findViewById<View>(R.id.layoutPage4)
+        val pages = listOf(page1, page2, page3, page4)
+
+        val subtitles = listOf(
+            "Page 1 of 4: Setup & Connection",
+            "Page 2 of 4: Touchpad Gestures",
+            "Page 3 of 4: Remote Buttons Explained",
+            "Page 4 of 4: DRM Video Playback"
+        )
+        val dots = listOf(
+            "● ○ ○ ○",
+            "○ ● ○ ○",
+            "○ ○ ● ○",
+            "○ ○ ○ ●"
+        )
+
+        var currentPage = 0
+
+        fun updatePageUi() {
+            pages.forEachIndexed { index, view ->
+                view?.visibility = if (index == currentPage) View.VISIBLE else View.GONE
+            }
+            tvHeaderSubtitle?.text = subtitles[currentPage]
+            tvPageDots?.text = dots[currentPage]
+            btnPrev?.visibility = if (currentPage > 0) View.VISIBLE else View.INVISIBLE
+            btnNext?.text = if (currentPage == pages.size - 1) "Got It! ✓" else "Next →"
+        }
+
+        btnPrev?.setOnClickListener {
+            if (currentPage > 0) {
+                currentPage--
+                updatePageUi()
+            }
+        }
+
+        btnNext?.setOnClickListener {
+            if (currentPage < pages.size - 1) {
+                currentPage++
+                updatePageUi()
+            } else {
+                dialog.dismiss()
+            }
+        }
+
+        btnClose?.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 
     private fun performLeftClick() {

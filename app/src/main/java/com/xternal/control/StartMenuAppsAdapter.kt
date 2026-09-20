@@ -26,7 +26,16 @@ class StartMenuAppsAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val app = apps[position]
         holder.tvStartMenuAppName.text = app.label
-        holder.ivStartMenuIcon.setImageDrawable(app.icon)
+        if (app.isLocked) {
+            val colorMatrix = android.graphics.ColorMatrix().apply { setSaturation(0f) }
+            holder.ivStartMenuIcon.colorFilter = android.graphics.ColorMatrixColorFilter(colorMatrix)
+            holder.tvStartMenuAppName.setTextColor(0xFF8A92A6.toInt())
+            holder.itemView.alpha = 0.38f
+        } else {
+            holder.ivStartMenuIcon.clearColorFilter()
+            holder.tvStartMenuAppName.setTextColor(0xFFFFFFFF.toInt())
+            holder.itemView.alpha = 1.0f
+        }
 
         holder.itemView.setOnClickListener { onItemClick(app) }
         holder.itemView.setOnLongClickListener {

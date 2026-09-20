@@ -24,6 +24,7 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -460,18 +461,18 @@ class ExternalActivity : AppCompatActivity() {
         }
         allApps = updatedApps
 
-        // Favorite Apps for Desktop and Taskbar
+        // Favorite Apps for Desktop and Taskbar (unlocked clickable apps first)
         val favApps = allApps.filter { it.isFavourite }
+            .sortedWith(compareBy<AppInfo> { it.isLocked }.thenBy { it.label.lowercase(Locale.getDefault()) })
         desktopAdapter.updateData(favApps)
         taskbarAdapter.updateData(favApps)
 
-        // Filtered apps for Start Menu
-        val filteredStartApps = if (appSearchQuery.isEmpty()) {
-            allApps.sortedBy { it.label.lowercase(Locale.getDefault()) }
+        // Filtered apps for Start Menu (unlocked clickable apps first)
+        val filteredStartApps = (if (appSearchQuery.isEmpty()) {
+            allApps
         } else {
             allApps.filter { it.label.contains(appSearchQuery, ignoreCase = true) }
-                .sortedBy { it.label.lowercase(Locale.getDefault()) }
-        }
+        }).sortedWith(compareBy<AppInfo> { it.isLocked }.thenBy { it.label.lowercase(Locale.getDefault()) })
         startMenuAdapter.updateData(filteredStartApps)
     }
 
@@ -764,23 +765,71 @@ class ExternalActivity : AppCompatActivity() {
     }
 
     private fun showGuideDialog() {
-        val builder = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-        builder.setTitle("👓 Windows Desktop Guide & Tips")
-        builder.setMessage(
-            "🪟 Windows Desktop Controls:\n" +
-            "• Taskbar: Click 'Start' to open the Start Menu search & app drawer.\n" +
-            "• Pinned Apps: Pinned apps appear both on your Desktop & Taskbar.\n" +
-            "• System Tray: Check live Wi-Fi, Battery %, Time & Notification flyout.\n" +
-            "• Multitasking Blob: When an app is open, tap ⚡ on the right to switch apps in 1-click!\n\n" +
-            "🖱️ Trackpad & Mouse:\n" +
-            "• 1-Finger Tap: Left Click / Select\n" +
-            "• Long Press (600ms): Pin / Unpin apps\n" +
-            "• 2-Finger Drag: Scroll lists smoothly\n\n" +
-            "📸 Screenshot Tool:\n" +
-            "• Tap 📸 on your phone controller to capture and save the external glasses display!"
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_quick_guide, null)
+        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val tvHeaderSubtitle = dialogView.findViewById<TextView>(R.id.tvGuideHeaderSubtitle)
+        val btnClose = dialogView.findViewById<View>(R.id.btnGuideClose)
+        val btnPrev = dialogView.findViewById<android.widget.Button>(R.id.btnGuidePrev)
+        val btnNext = dialogView.findViewById<android.widget.Button>(R.id.btnGuideNext)
+        val tvPageDots = dialogView.findViewById<TextView>(R.id.tvGuidePageDots)
+
+        val page1 = dialogView.findViewById<View>(R.id.layoutPage1)
+        val page2 = dialogView.findViewById<View>(R.id.layoutPage2)
+        val page3 = dialogView.findViewById<View>(R.id.layoutPage3)
+        val page4 = dialogView.findViewById<View>(R.id.layoutPage4)
+        val pages = listOf(page1, page2, page3, page4)
+
+        val subtitles = listOf(
+            "Page 1 of 4: Setup & Connection",
+            "Page 2 of 4: Touchpad Gestures",
+            "Page 3 of 4: Remote Buttons Explained",
+            "Page 4 of 4: DRM Video Playback"
         )
-        builder.setPositiveButton("GOT IT") { dialog, _ -> dialog.dismiss() }
-        builder.show()
+        val dots = listOf(
+            "● ○ ○ ○",
+            "○ ● ○ ○",
+            "○ ○ ● ○",
+            "○ ○ ○ ●"
+        )
+
+        var currentPage = 0
+
+        fun updatePageUi() {
+            pages.forEachIndexed { index, view ->
+                view?.visibility = if (index == currentPage) View.VISIBLE else View.GONE
+            }
+            tvHeaderSubtitle?.text = subtitles[currentPage]
+            tvPageDots?.text = dots[currentPage]
+            btnPrev?.visibility = if (currentPage > 0) View.VISIBLE else View.INVISIBLE
+            btnNext?.text = if (currentPage == pages.size - 1) "Got It! ✓" else "Next →"
+        }
+
+        btnPrev?.setOnClickListener {
+            if (currentPage > 0) {
+                currentPage--
+                updatePageUi()
+            }
+        }
+
+        btnNext?.setOnClickListener {
+            if (currentPage < pages.size - 1) {
+                currentPage++
+                updatePageUi()
+            } else {
+                dialog.dismiss()
+            }
+        }
+
+        btnClose?.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 
     private fun tryEnableHighestResolution() {

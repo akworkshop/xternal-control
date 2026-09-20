@@ -27,6 +27,16 @@ class DesktopIconsAdapter(
         val app = apps[position]
         holder.tvDesktopAppName.text = app.label
         holder.ivDesktopIcon.setImageDrawable(app.icon)
+        if (app.isLocked) {
+            val colorMatrix = android.graphics.ColorMatrix().apply { setSaturation(0f) }
+            holder.ivDesktopIcon.colorFilter = android.graphics.ColorMatrixColorFilter(colorMatrix)
+            holder.tvDesktopAppName.setTextColor(0xFF8A92A6.toInt())
+            holder.itemView.alpha = 0.38f
+        } else {
+            holder.ivDesktopIcon.clearColorFilter()
+            holder.tvDesktopAppName.setTextColor(0xFFFFFFFF.toInt())
+            holder.itemView.alpha = 1.0f
+        }
 
         holder.itemView.setOnClickListener { onItemClick(app) }
         holder.itemView.setOnLongClickListener {

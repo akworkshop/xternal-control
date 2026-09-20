@@ -52,10 +52,18 @@ class AppListAdapter(
             holder.tvAppName.text = app.label
             holder.ivAppIcon.setImageDrawable(app.icon)
         }
-        
+
         if (app.isLocked) {
-            holder.itemView.alpha = 0.4f
+            val colorMatrix = android.graphics.ColorMatrix().apply { setSaturation(0f) }
+            val filter = android.graphics.ColorMatrixColorFilter(colorMatrix)
+            holder.ivAppIcon.colorFilter = filter
+            ivBanner?.colorFilter = filter
+            holder.tvAppName.setTextColor(0xFF8A92A6.toInt())
+            holder.itemView.alpha = 0.38f
         } else {
+            holder.ivAppIcon.clearColorFilter()
+            ivBanner?.clearColorFilter()
+            holder.tvAppName.setTextColor(0xFFFFFFFF.toInt())
             holder.itemView.alpha = 1.0f
         }
         

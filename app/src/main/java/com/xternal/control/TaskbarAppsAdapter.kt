@@ -24,6 +24,14 @@ class TaskbarAppsAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val app = apps[position]
         holder.ivTaskbarIcon.setImageDrawable(app.icon)
+        if (app.isLocked) {
+            val colorMatrix = android.graphics.ColorMatrix().apply { setSaturation(0f) }
+            holder.ivTaskbarIcon.colorFilter = android.graphics.ColorMatrixColorFilter(colorMatrix)
+            holder.itemView.alpha = 0.38f
+        } else {
+            holder.ivTaskbarIcon.clearColorFilter()
+            holder.itemView.alpha = 1.0f
+        }
 
         holder.itemView.setOnClickListener { onItemClick(app) }
         holder.itemView.setOnLongClickListener {

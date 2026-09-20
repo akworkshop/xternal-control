@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="16dp"
+    app:cardCornerRadius="20dp"
+    app:cardElevation="16dp"
+    app:cardBackgroundColor="@color/bg_panel">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tvGuideHeaderIcon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📖"
+                android:textSize="22sp"
+                android:layout_marginEnd="10dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvGuideHeaderTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="User Guide &amp; Controls"
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvGuideHeaderSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Page 1 of 4: Setup &amp; Connection"
+                    android:textColor="@color/neon_cyan"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Close Button -->
+            <TextView
+                android:id="@+id/btnGuideClose"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:gravity="center"
+                android:text="✕"
+                android:textColor="@color/text_secondary"
+                android:textSize="16sp"
+                android:background="@drawable/bg_rounded_search"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="12dp"
+            android:background="@color/glass_white_border" />
+
+        <!-- Scrollable Content Area -->
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="330dp"
+            android:fadeScrollbars="false"
+            android:fillViewport="true">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <!-- Page 1: Setup & Connection -->
+                <LinearLayout
+                    android:id="@+id/layoutPage1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="visible">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="1. CONNECT YOUR DISPLAY"
+                        android:textColor="@color/neon_cyan"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:lineSpacingMultiplier="1.2"
+                        android:text="Connect your USB-C AR glasses (XREAL, Rokid, RayNeo) or portable monitor to your phone. The status badge will show green CONNECTED."
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:text="2. ESSENTIAL PERMISSIONS"
+                        android:textColor="@color/neon_cyan"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:lineSpacingMultiplier="1.2"
+                        android:text="In the SETUP tab, enable:\n• Display Over Other Apps: renders the cursor overlay across all secondary screen apps.\n• Accessibility Service: dispatches clicks, scrolling, pinch-zoom, Back &amp; Home actions."
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:text="3. PINNING FAVORITE APPS"
+                        android:textColor="@color/neon_cyan"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:lineSpacingMultiplier="1.2"
+                        android:text="In the APPS tab, browse installed apps. Tap the ⭐ star icon or long-press an app to pin it to your Glasses Desktop &amp; Taskbar. Clickable apps are displayed first."
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <!-- Page 2: Trackpad & Gestures -->
+                <LinearLayout
+                    android:id="@+id/layoutPage2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="TOUCHPAD GESTURES GUIDE"
+                        android:textColor="@color/neon_cyan"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:lineSpacingMultiplier="1.3"
+                        android:text="👆 1-Finger Drag:\nSmoothly moves the cursor across the glasses display.\n\n👆 1-Finger Tap:\nLeft-click to open apps, select menus, or tap buttons.\n\n✌️ 2-Finger Drag / Swipe:\nVertical or horizontal smooth scrolling through web pages, lists, and social feeds.\n\n✌️ 2-Finger Tap:\nSecondary / Right-click (opens desktop context menu).\n\n⏱️ Long-Press (0.6s):\nTriggers long-press actions, text selection, or drag.\n\n🔍 Zoom Slider (Right Edge):\nSlide up/down for instant pinch zoom in/out in Maps, Photos, and web browsers."
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <!-- Page 3: Remote Buttons -->
+                <LinearLayout
+                    android:id="@+id/layoutPage3"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="REMOTE BAR BUTTONS EXPLAINED"
+                        android:textColor="@color/neon_cyan"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:lineSpacingMultiplier="1.3"
+                        android:text="← BACK BUTTON:\nNavigates back inside third-party apps, browsers, and menus.\n\n⌂ HOME BUTTON:\nReturns immediately to the Windows 11 Desktop launcher on your glasses display and resets floating mode.\n\n💡 THEATER MODE:\nDims phone screen to pitch black with minimum brightness to eliminate glare and save battery. Touchpad remains active. Double-tap to wake phone screen.\n\n👓 FLOATING / PiP MODE:\nHides desktop wallpaper and icons (pure black transparent pass-through for AR glasses) so running apps float in space. Tap again to restore the app back to full screen!\n\n🎬 DRM VIDEO PLAY:\nInstantly hides the cursor overlay so protected video streaming apps (Netflix, Apple TV+) can play without DRM blocks.\n\n📸 SCREENSHOT:\nCaptures the external glasses screen and saves the image to Pictures/XternalControl."
+                        android:textColor="@color/text_primary"
+                        android:textSize="12.5sp" />
+                </LinearLayout>
+
+                <!-- Page 4: DRM Workaround -->
+                <LinearLayout
+                    android:id="@+id/layoutPage4"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="STREAMING &amp; DRM VIDEO PLAYBACK"
+                        android:textColor="@color/neon_cyan"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:lineSpacingMultiplier="1.2"
+                        android:text="Apps like Netflix, Apple TV+, Prime Video, and Disney+ use Widevine L1 hardware DRM. Android blocks DRM video playback if an active floating overlay is detected over the video surface."
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="THE 3-STEP DRM WORKAROUND:"
+                        android:textColor="@color/neon_emerald"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:lineSpacingMultiplier="1.3"
+                        android:text="1. NAVIGATE &amp; START:\nUse the trackpad cursor to open Netflix / Apple TV and select your movie or episode. Press Play.\n\n2. TAP 🎬 (DRM PLAY):\nTap the 🎬 button in the remote bar (or release trackpad for 5 seconds). This completely detaches the cursor overlay.\n\n3. ENJOY VIDEO:\nThe video will play seamlessly in full HD/4K without DRM errors or black screens!\n\n💡 RESUME CONTROL ANYTIME:\nNeed to pause, seek, or change subtitles? Simply touch the trackpad to instantly bring the cursor back."
+                        android:textColor="@color/text_primary"
+                        android:textSize="12.5sp" />
+                </LinearLayout>
+            </FrameLayout>
+        </ScrollView>
+
+        <!-- Bottom Navigation & Indicators -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="14dp"
+            android:background="@color/glass_white_border" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <Button
+                android:id="@+id/btnGuidePrev"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_rounded_search"
+                android:text="← Prev"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:visibility="invisible" />
+
+            <TextView
+                android:id="@+id/tvGuidePageDots"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="● ○ ○ ○"
+                android:textColor="@color/neon_cyan"
+                android:textSize="14sp"
+                android:letterSpacing="0.2" />
+
+            <Button
+                android:id="@+id/btnGuideNext"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_rounded_search"
+                app:backgroundTint="@color/neon_cyan"
+                android:text="Next →"
+                android:textColor="@color/text_dark"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>
