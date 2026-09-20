@@ -161,8 +161,10 @@ class ExternalActivity : AppCompatActivity() {
             launcherContainer.visibility = View.GONE
             ivExtBackground.visibility = View.GONE
             rootContainer.setBackgroundColor(Color.BLACK)
+            InteractionBridge.sendDesktopForegroundState(false)
         } else {
             returnToDesktop()
+            InteractionBridge.sendDesktopForegroundState(true)
         }
         systemTrayHandler.post(systemTrayRunnable)
         loadListsFromPreferences()
@@ -176,6 +178,7 @@ class ExternalActivity : AppCompatActivity() {
 
     override fun onPause() {
         systemTrayHandler.removeCallbacks(systemTrayRunnable)
+        InteractionBridge.sendDesktopForegroundState(false)
         super.onPause()
     }
 
@@ -502,6 +505,7 @@ class ExternalActivity : AppCompatActivity() {
 
     private fun launchApp(packageName: String) {
         layoutStartMenu.visibility = View.GONE
+        InteractionBridge.sendDesktopForegroundState(false)
         InteractionBridge.sendAppLaunchedFromExternal(packageName)
 
         if (!isProActive()) {
@@ -562,20 +566,21 @@ class ExternalActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleBackNavigation() {
+    private fun handleBackNavigation(): Boolean {
         if (cvContextMenu.visibility == View.VISIBLE) {
             cvContextMenu.visibility = View.GONE
-            return
+            return true
         }
         if (layoutStartMenu.visibility == View.VISIBLE) {
             layoutStartMenu.visibility = View.GONE
-            return
+            return true
         }
         if (virtualAppContainer.visibility == View.VISIBLE) {
             returnToDesktop()
-            return
+            return true
         }
         // When on clean desktop: do nothing to prevent exiting ExternalActivity or going back to background apps
+        return false
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {

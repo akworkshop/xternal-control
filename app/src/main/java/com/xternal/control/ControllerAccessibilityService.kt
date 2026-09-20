@@ -31,7 +31,11 @@ class ControllerAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Not tracking accessibility events, only injecting navigation/input actions
+        if (event == null) return
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val pkg = event.packageName?.toString() ?: return
+            InteractionBridge.sendForegroundPackageChanged(pkg)
+        }
     }
 
     override fun onInterrupt() {
@@ -204,7 +208,7 @@ class ControllerAccessibilityService : AccessibilityService() {
                 setDisplayId(displayId)
             }
         }
-        try {
+        val dispatched = try {
             dispatchGesture(builder.build(), object : AccessibilityService.GestureResultCallback() {
                 override fun onCompleted(gestureDescription: GestureDescription?) {
                     super.onCompleted(gestureDescription)
@@ -217,6 +221,10 @@ class ControllerAccessibilityService : AccessibilityService() {
             }, null)
         } catch (e: Exception) {
             e.printStackTrace()
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            true
+        }
+        if (!dispatched) {
             performGlobalAction(GLOBAL_ACTION_BACK)
         }
     }

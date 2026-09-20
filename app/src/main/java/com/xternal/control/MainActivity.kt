@@ -395,16 +395,17 @@ class MainActivity : AppCompatActivity() {
 
         // Bind controller bottom navigation bar remote buttons
         findViewById<View>(R.id.btnMainBack).setOnClickListener {
-            if (isDesktopActive) {
-                InteractionBridge.sendBackRequest()
-            } else {
+            val consumedByDesktopMenu = InteractionBridge.sendBackRequest()
+            if (consumedByDesktopMenu) {
+                return@setOnClickListener
+            }
+
+            if (!isDesktopActive) {
                 val service = ControllerAccessibilityService.instance
                 if (service != null && externalDisplayId != -1) {
                     service.performBackOnDisplay(externalDisplayId, overlayCursorX, overlayCursorY)
                 } else if (service != null) {
                     service.performBackAction()
-                } else {
-                    InteractionBridge.sendBackRequest()
                 }
             }
         }
@@ -793,6 +794,7 @@ class MainActivity : AppCompatActivity() {
             showProUpgradeDialog()
             return
         }
+        isDesktopActive = false
         lastLaunchedExternalPackage = packageName
         // Track recents: move to start
         recentPackages.remove(packageName)
@@ -1423,6 +1425,14 @@ class MainActivity : AppCompatActivity() {
                     isDesktopActive = false
                     lastLaunchedExternalPackage = pkg
                 }
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
+
+        InteractionBridge.desktopForegroundStateListener = { isForeground ->
+            try {
+                isDesktopActive = isForeground
             } catch (e: Throwable) {
                 e.printStackTrace()
             }
