@@ -15,8 +15,11 @@ object InteractionBridge {
     var appLaunchListener: ((String) -> Unit)? = null
     var zoomListener: ((Boolean) -> Unit)? = null
     var pipModeListener: ((Boolean) -> Unit)? = null
+    var pipStateChangedListener: ((Boolean) -> Unit)? = null
     var screenshotRequestListener: (() -> Unit)? = null
     var homeRequestListener: (() -> Unit)? = null
+    var appLaunchedFromExternalListener: ((String) -> Unit)? = null
+    var foregroundPackageChangedListener: ((String) -> Unit)? = null
     var isKeyboardActive: Boolean = false
 
     fun sendScreenshotRequest() {
@@ -61,6 +64,18 @@ object InteractionBridge {
 
     fun sendPipMode(enabled: Boolean) {
         runOnMain { pipModeListener?.invoke(enabled) }
+    }
+
+    fun sendPipStateChanged(active: Boolean) {
+        runOnMain { pipStateChangedListener?.invoke(active) }
+    }
+
+    fun sendAppLaunchedFromExternal(packageName: String) {
+        runOnMain { appLaunchedFromExternalListener?.invoke(packageName) }
+    }
+
+    fun sendForegroundPackageChanged(packageName: String) {
+        runOnMain { foregroundPackageChangedListener?.invoke(packageName) }
     }
 
     private fun runOnMain(action: () -> Unit) {

@@ -142,6 +142,7 @@ class ExternalActivity : AppCompatActivity() {
         if (::billingManager.isInitialized) {
             billingManager.destroy()
         }
+        InteractionBridge.pipModeListener = null
         super.onDestroy()
     }
 
@@ -495,6 +496,7 @@ class ExternalActivity : AppCompatActivity() {
 
     private fun launchApp(packageName: String) {
         layoutStartMenu.visibility = View.GONE
+        InteractionBridge.sendAppLaunchedFromExternal(packageName)
 
         if (!isProActive()) {
             val targetApp = allApps.find { it.packageName == packageName }
@@ -560,6 +562,7 @@ class ExternalActivity : AppCompatActivity() {
 
         launcherContainer.visibility = View.VISIBLE
         applyBackgroundTheme()
+        InteractionBridge.sendPipStateChanged(false)
     }
 
     private fun setupInteractionBridge() {
@@ -653,14 +656,18 @@ class ExternalActivity : AppCompatActivity() {
         }
 
         InteractionBridge.pipModeListener = { enabled ->
-            isPipMode = enabled
-            if (enabled) {
-                launcherContainer.visibility = View.GONE
-                ivExtBackground.visibility = View.GONE
-                rootContainer.setBackgroundColor(Color.BLACK)
-            } else {
-                launcherContainer.visibility = View.VISIBLE
-                applyBackgroundTheme()
+            try {
+                isPipMode = enabled
+                if (enabled) {
+                    launcherContainer.visibility = View.GONE
+                    ivExtBackground.visibility = View.GONE
+                    rootContainer.setBackgroundColor(Color.BLACK)
+                } else {
+                    launcherContainer.visibility = View.VISIBLE
+                    applyBackgroundTheme()
+                }
+            } catch (e: Throwable) {
+                e.printStackTrace()
             }
         }
 

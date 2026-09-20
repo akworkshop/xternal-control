@@ -114,6 +114,7 @@ class MainActivity : AppCompatActivity() {
     private var zoomRunnable: Runnable? = null
     private var lastZoomTime = 0L
     private var isPipModeActive = false
+    private var lastLaunchedExternalPackage: String? = null
     private var isCursorWindowAttached = false
     private val cursorHideHandler = Handler(Looper.getMainLooper())
     private val cursorHideRunnable = Runnable { hideOverlayCursor() }
@@ -236,6 +237,7 @@ class MainActivity : AppCompatActivity() {
         viewCursorMirror = findViewById(R.id.viewCursorMirror)
         btnPipMode = findViewById(R.id.btnPipMode)
         btnToggleCursor = findViewById(R.id.btnToggleCursor)
+        setupBridgeListeners()
 
         btnDonate = findViewById(R.id.btnDonate)
         updateProUi()
@@ -404,6 +406,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.btnMainHome).setOnClickListener {
+            updatePipButtonUi(false)
+            InteractionBridge.sendPipMode(false)
             InteractionBridge.sendHomeRequest()
             if (externalDisplayId != -1) {
                 try {
@@ -770,6 +774,7 @@ class MainActivity : AppCompatActivity() {
             showProUpgradeDialog()
             return
         }
+        lastLaunchedExternalPackage = packageName
         // Track recents: move to start
         recentPackages.remove(packageName)
         recentPackages.add(0, packageName)
@@ -1145,7 +1150,13 @@ class MainActivity : AppCompatActivity() {
         )
 
         // Update adapter data
-        appAdapter.updateData(sortedApps)
+        if (::appAdapter.isInitialized) {
+            try {
+                appAdapter.updateData(sortedApps)
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
     }
 
     private fun isProActive(): Boolean {
@@ -1367,45 +1378,144 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Screen Restored", Toast.LENGTH_SHORT).show()
     }
 
+    private fun setupBridgeListeners() {
+        InteractionBridge.appLaunchedFromExternalListener = { pkg ->
+            try {
+                lastLaunchedExternalPackage = pkg
+                recentPackages.remove(pkg)
+                recentPackages.add(0, pkg)
+                saveListsToPreferences()
+                if (::appAdapter.isInitialized) {
+                    sortAndRefreshAppLists()
+                }
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
+
+        InteractionBridge.foregroundPackageChangedListener = { pkg ->
+            try {
+                lastLaunchedExternalPackage = pkg
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
+
+        InteractionBridge.pipStateChangedListener = { active ->
+            try {
+                updatePipButtonUi(active)
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun updatePipButtonUi(isActive: Boolean) {
+        try {
+            isPipModeActive = isActive
+            val tvBtn = btnPipMode as? TextView ?: return
+            if (isActive) {
+                tvBtn.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_cyan)
+                tvBtn.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
+            } else {
+                tvBtn.backgroundTintList = null
+                tvBtn.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+            }
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
     private fun togglePipPassThrough() {
-        isPipModeActive = !isPipModeActive
-        val tvBtn = btnPipMode as TextView
-        if (isPipModeActive) {
-            tvBtn.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_cyan)
-            tvBtn.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
-            Toast.makeText(this, "PiP Pass-Through Active (Glasses background is black)", Toast.LENGTH_SHORT).show()
-            InteractionBridge.sendPipMode(true)
+        try {
+            isPipModeActive = !isPipModeActive
 
-            if (externalDisplayId != -1) {
-                try {
-                    val options = ActivityOptions.makeBasic()
-                    options.launchDisplayId = externalDisplayId
-                    val intent = Intent(this, ExternalActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            if (isPipModeActive) {
+                // 1st Tap: Enter Floating / PiP mode:
+                // Desktop launcher is hidden (pure black pass-through for AR glasses)
+                updatePipButtonUi(true)
+                Toast.makeText(this, "PiP Mode Active (Glasses background is black)", Toast.LENGTH_SHORT).show()
+                InteractionBridge.sendPipMode(true)
+
+                // Bring ExternalActivity to display with pure black background
+                if (externalDisplayId != -1) {
+                    try {
+                        val options = ActivityOptions.makeBasic()
+                        options.launchDisplayId = externalDisplayId
+                        val intent = Intent(this, ExternalActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                        }
+                        startActivity(intent, options.toBundle())
+                    } catch (e: Throwable) {
+                        e.printStackTrace()
                     }
-                    startActivity(intent, options.toBundle())
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                }
+
+                if (lastLaunchedExternalPackage.isNullOrEmpty() && recentPackages.isNotEmpty()) {
+                    lastLaunchedExternalPackage = recentPackages.firstOrNull { it.isNotEmpty() }
+                }
+            } else {
+                // 2nd Tap: User clicked Glasses button again:
+                // Restore the running app back to FULL SCREEN!
+                updatePipButtonUi(false)
+                InteractionBridge.sendPipMode(false)
+
+                if (lastLaunchedExternalPackage.isNullOrEmpty() && recentPackages.isNotEmpty()) {
+                    lastLaunchedExternalPackage = recentPackages.firstOrNull { it.isNotEmpty() }
+                }
+
+                val targetPackage = lastLaunchedExternalPackage
+                var appLaunched = false
+
+                if (externalDisplayId != -1 && !targetPackage.isNullOrEmpty()) {
+                    when {
+                        targetPackage == "mock.browser" || targetPackage == "mock.notes" || targetPackage == "mock.map" -> {
+                            InteractionBridge.sendAppLaunch(targetPackage)
+                            appLaunched = true
+                            Toast.makeText(this, "Restoring app to Full Screen", Toast.LENGTH_SHORT).show()
+                        }
+                        else -> {
+                            try {
+                                val launchIntent = packageManager.getLaunchIntentForPackage(targetPackage)
+                                if (launchIntent != null) {
+                                    val options = ActivityOptions.makeBasic()
+                                    options.launchDisplayId = externalDisplayId
+                                    launchIntent.addFlags(
+                                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                        Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                                    )
+                                    startActivity(launchIntent, options.toBundle())
+                                    appLaunched = true
+                                    Toast.makeText(this, "Restoring app to Full Screen...", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Throwable) {
+                                e.printStackTrace()
+                            }
+                        }
+                    }
+                }
+
+                if (!appLaunched) {
+                    // Fallback: restore desktop in ExternalActivity
+                    if (externalDisplayId != -1) {
+                        try {
+                            val options = ActivityOptions.makeBasic()
+                            options.launchDisplayId = externalDisplayId
+                            val intent = Intent(this, ExternalActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                            }
+                            startActivity(intent, options.toBundle())
+                        } catch (e: Throwable) {
+                            e.printStackTrace()
+                        }
+                    }
+                    Toast.makeText(this, "Glasses returned to Desktop", Toast.LENGTH_SHORT).show()
                 }
             }
-        } else {
-            tvBtn.backgroundTintList = null
-            tvBtn.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
-            Toast.makeText(this, "PiP Pass-Through Deactivated", Toast.LENGTH_SHORT).show()
-            InteractionBridge.sendPipMode(false)
-
-            if (externalDisplayId != -1) {
-                try {
-                    val options = ActivityOptions.makeBasic()
-                    options.launchDisplayId = externalDisplayId
-                    val intent = Intent(this, ExternalActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                    }
-                    startActivity(intent, options.toBundle())
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            Toast.makeText(this, "Action could not be completed", Toast.LENGTH_SHORT).show()
         }
     }
 
