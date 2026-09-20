@@ -18,6 +18,7 @@ object InteractionBridge {
     var pipStateChangedListener: ((Boolean) -> Unit)? = null
     var screenshotRequestListener: (() -> Unit)? = null
     var homeRequestListener: (() -> Unit)? = null
+    var backRequestListener: (() -> Unit)? = null
     var appLaunchedFromExternalListener: ((String) -> Unit)? = null
     var foregroundPackageChangedListener: ((String) -> Unit)? = null
     var isKeyboardActive: Boolean = false
@@ -28,6 +29,10 @@ object InteractionBridge {
 
     fun sendHomeRequest() {
         runOnMain { homeRequestListener?.invoke() }
+    }
+
+    fun sendBackRequest() {
+        runOnMain { backRequestListener?.invoke() }
     }
 
     fun sendCursorMove(dx: Float, dy: Float) {

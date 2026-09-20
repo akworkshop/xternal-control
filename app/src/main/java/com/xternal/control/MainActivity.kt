@@ -114,6 +114,7 @@ class MainActivity : AppCompatActivity() {
     private var zoomRunnable: Runnable? = null
     private var lastZoomTime = 0L
     private var isPipModeActive = false
+    private var isDesktopActive = true
     private var lastLaunchedExternalPackage: String? = null
     private var isCursorWindowAttached = false
     private val cursorHideHandler = Handler(Looper.getMainLooper())
@@ -346,8 +347,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnToggleCursor.setOnClickListener {
-            // Instantly hide the cursor to let DRM play
-            hideOverlayCursor()
+            // Instantly hide and completely detach the cursor overlay to let DRM play
+            hideOverlayCursor(completelyDetach = true)
             Toast.makeText(this, "DRM Play Active (Cursor hidden)", Toast.LENGTH_SHORT).show()
         }
 
@@ -394,18 +395,22 @@ class MainActivity : AppCompatActivity() {
 
         // Bind controller bottom navigation bar remote buttons
         findViewById<View>(R.id.btnMainBack).setOnClickListener {
-            val service = ControllerAccessibilityService.instance
-            if (service != null && externalDisplayId != -1) {
-                service.performBackOnDisplay(externalDisplayId, overlayCursorX, overlayCursorY)
-            } else if (service != null) {
-                service.performBackAction()
+            if (isDesktopActive) {
+                InteractionBridge.sendBackRequest()
             } else {
-                InteractionBridge.sendRightClick() // Routes BACK action to ExternalActivity
-                Toast.makeText(this, "Enable Accessibility for system-wide Back control", Toast.LENGTH_SHORT).show()
+                val service = ControllerAccessibilityService.instance
+                if (service != null && externalDisplayId != -1) {
+                    service.performBackOnDisplay(externalDisplayId, overlayCursorX, overlayCursorY)
+                } else if (service != null) {
+                    service.performBackAction()
+                } else {
+                    InteractionBridge.sendBackRequest()
+                }
             }
         }
 
         findViewById<View>(R.id.btnMainHome).setOnClickListener {
+            isDesktopActive = true
             updatePipButtonUi(false)
             InteractionBridge.sendPipMode(false)
             InteractionBridge.sendHomeRequest()
@@ -670,7 +675,7 @@ class MainActivity : AppCompatActivity() {
         tvTrackpadInstruction.visibility = View.VISIBLE
         viewCursorMirror.visibility = View.GONE
         cursorHideHandler.removeCallbacks(cursorHideRunnable)
-        hideOverlayCursor()
+        hideOverlayCursor(completelyDetach = true)
         runOnUiThread {
             overlayCursorView = null
             overlayWindowManager = null
@@ -730,22 +735,36 @@ class MainActivity : AppCompatActivity() {
                     overlayWindowManager?.addView(overlayCursorView, overlayParams)
                     isCursorWindowAttached = true
                 }
+
+                // Smoothly unhide view and restore opacity
+                overlayCursorView?.let { view ->
+                    view.visibility = View.VISIBLE
+                    view.alpha = 1.0f
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
     }
 
-    private fun hideOverlayCursor() {
+    private fun hideOverlayCursor(completelyDetach: Boolean = false) {
         runOnUiThread {
             try {
-                if (isCursorWindowAttached && overlayCursorView != null && overlayWindowManager != null) {
-                    overlayWindowManager?.removeView(overlayCursorView)
+                if (completelyDetach) {
+                    // For DRM Play mode or display disconnect: completely detach from WindowManager
+                    if (isCursorWindowAttached && overlayCursorView != null && overlayWindowManager != null) {
+                        overlayWindowManager?.removeView(overlayCursorView)
+                    }
+                    isCursorWindowAttached = false
+                } else {
+                    // For idle timeout: hide view and zero alpha to keep hardware compositor clean without leaving ghost frames
+                    overlayCursorView?.let { view ->
+                        view.alpha = 0f
+                        view.visibility = View.GONE
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-            } finally {
-                isCursorWindowAttached = false
             }
         }
     }
@@ -1381,12 +1400,15 @@ class MainActivity : AppCompatActivity() {
     private fun setupBridgeListeners() {
         InteractionBridge.appLaunchedFromExternalListener = { pkg ->
             try {
-                lastLaunchedExternalPackage = pkg
-                recentPackages.remove(pkg)
-                recentPackages.add(0, pkg)
-                saveListsToPreferences()
-                if (::appAdapter.isInitialized) {
-                    sortAndRefreshAppLists()
+                if (pkg != packageName) {
+                    isDesktopActive = false
+                    lastLaunchedExternalPackage = pkg
+                    recentPackages.remove(pkg)
+                    recentPackages.add(0, pkg)
+                    saveListsToPreferences()
+                    if (::appAdapter.isInitialized) {
+                        sortAndRefreshAppLists()
+                    }
                 }
             } catch (e: Throwable) {
                 e.printStackTrace()
@@ -1395,7 +1417,12 @@ class MainActivity : AppCompatActivity() {
 
         InteractionBridge.foregroundPackageChangedListener = { pkg ->
             try {
-                lastLaunchedExternalPackage = pkg
+                if (pkg == packageName) {
+                    isDesktopActive = true
+                } else if (!pkg.isNullOrEmpty()) {
+                    isDesktopActive = false
+                    lastLaunchedExternalPackage = pkg
+                }
             } catch (e: Throwable) {
                 e.printStackTrace()
             }
@@ -1426,8 +1453,67 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun restoreAppToFullScreen(targetPackage: String) {
+        if (targetPackage.isEmpty() || targetPackage == packageName) {
+            return
+        }
+        var appLaunched = false
+        if (externalDisplayId != -1) {
+            when {
+                targetPackage == "mock.browser" || targetPackage == "mock.notes" || targetPackage == "mock.map" -> {
+                    InteractionBridge.sendAppLaunch(targetPackage)
+                    appLaunched = true
+                    isDesktopActive = false
+                    updatePipButtonUi(false)
+                    Toast.makeText(this, "Restoring app to Full Screen", Toast.LENGTH_SHORT).show()
+                }
+                else -> {
+                    try {
+                        val launchIntent = packageManager.getLaunchIntentForPackage(targetPackage)
+                        if (launchIntent != null) {
+                            val options = ActivityOptions.makeBasic()
+                            options.launchDisplayId = externalDisplayId
+                            launchIntent.addFlags(
+                                Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                            )
+                            startActivity(launchIntent, options.toBundle())
+                            appLaunched = true
+                            isDesktopActive = false
+                            updatePipButtonUi(false)
+                            Toast.makeText(this, "Restoring app to Full Screen...", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Throwable) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+        }
+        if (!appLaunched) {
+            Toast.makeText(this, "App could not be restored", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun togglePipPassThrough() {
         try {
+            val targetPackage = if (!lastLaunchedExternalPackage.isNullOrEmpty() && lastLaunchedExternalPackage != packageName) {
+                lastLaunchedExternalPackage
+            } else {
+                recentPackages.firstOrNull { it.isNotEmpty() && it != packageName }
+            }
+
+            if (isDesktopActive) {
+                // If on desktop, clicking glasses button restores the running app to full screen
+                if (!targetPackage.isNullOrEmpty()) {
+                    restoreAppToFullScreen(targetPackage)
+                } else {
+                    Toast.makeText(this, "Open an app first to use floating mode", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
+
+            // Inside an app: toggle between floating (black pass-through) and full screen
             isPipModeActive = !isPipModeActive
 
             if (isPipModeActive) {
@@ -1437,73 +1523,35 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "PiP Mode Active (Glasses background is black)", Toast.LENGTH_SHORT).show()
                 InteractionBridge.sendPipMode(true)
 
-                // Bring ExternalActivity to display with pure black background
                 if (externalDisplayId != -1) {
                     try {
                         val options = ActivityOptions.makeBasic()
                         options.launchDisplayId = externalDisplayId
                         val intent = Intent(this, ExternalActivity::class.java).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         }
                         startActivity(intent, options.toBundle())
                     } catch (e: Throwable) {
                         e.printStackTrace()
                     }
                 }
-
-                if (lastLaunchedExternalPackage.isNullOrEmpty() && recentPackages.isNotEmpty()) {
-                    lastLaunchedExternalPackage = recentPackages.firstOrNull { it.isNotEmpty() }
-                }
             } else {
                 // 2nd Tap: User clicked Glasses button again:
-                // Restore the running app back to FULL SCREEN!
+                // Restore running app back to FULL SCREEN!
                 updatePipButtonUi(false)
                 InteractionBridge.sendPipMode(false)
 
-                if (lastLaunchedExternalPackage.isNullOrEmpty() && recentPackages.isNotEmpty()) {
-                    lastLaunchedExternalPackage = recentPackages.firstOrNull { it.isNotEmpty() }
-                }
-
-                val targetPackage = lastLaunchedExternalPackage
-                var appLaunched = false
-
-                if (externalDisplayId != -1 && !targetPackage.isNullOrEmpty()) {
-                    when {
-                        targetPackage == "mock.browser" || targetPackage == "mock.notes" || targetPackage == "mock.map" -> {
-                            InteractionBridge.sendAppLaunch(targetPackage)
-                            appLaunched = true
-                            Toast.makeText(this, "Restoring app to Full Screen", Toast.LENGTH_SHORT).show()
-                        }
-                        else -> {
-                            try {
-                                val launchIntent = packageManager.getLaunchIntentForPackage(targetPackage)
-                                if (launchIntent != null) {
-                                    val options = ActivityOptions.makeBasic()
-                                    options.launchDisplayId = externalDisplayId
-                                    launchIntent.addFlags(
-                                        Intent.FLAG_ACTIVITY_NEW_TASK or
-                                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                                        Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-                                    )
-                                    startActivity(launchIntent, options.toBundle())
-                                    appLaunched = true
-                                    Toast.makeText(this, "Restoring app to Full Screen...", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Throwable) {
-                                e.printStackTrace()
-                            }
-                        }
-                    }
-                }
-
-                if (!appLaunched) {
+                if (!targetPackage.isNullOrEmpty()) {
+                    restoreAppToFullScreen(targetPackage)
+                } else {
                     // Fallback: restore desktop in ExternalActivity
+                    isDesktopActive = true
                     if (externalDisplayId != -1) {
                         try {
                             val options = ActivityOptions.makeBasic()
                             options.launchDisplayId = externalDisplayId
                             val intent = Intent(this, ExternalActivity::class.java).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                             }
                             startActivity(intent, options.toBundle())
                         } catch (e: Throwable) {

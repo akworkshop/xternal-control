@@ -24,6 +24,7 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -33,6 +34,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.recyclerview.widget.GridLayoutManager
@@ -88,7 +90,6 @@ class ExternalActivity : AppCompatActivity() {
     private var mapZoomLevel = 1.0f
 
     // Cursor & Context Menu
-    private lateinit var ivCursor: ImageView
     private lateinit var viewCursorRipple: View
     private lateinit var cvContextMenu: CardView
 
@@ -133,6 +134,12 @@ class ExternalActivity : AppCompatActivity() {
 
         setupInteractionBridge()
         setupSharedPreferencesListener()
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                handleBackNavigation()
+            }
+        })
     }
 
     override fun onDestroy() {
@@ -143,6 +150,7 @@ class ExternalActivity : AppCompatActivity() {
             billingManager.destroy()
         }
         InteractionBridge.pipModeListener = null
+        InteractionBridge.backRequestListener = null
         super.onDestroy()
     }
 
@@ -230,7 +238,6 @@ class ExternalActivity : AppCompatActivity() {
         tvMapCoords = findViewById(R.id.tvMapCoords)
         cvExtNavBar = findViewById(R.id.cvExtNavBar)
 
-        ivCursor = findViewById(R.id.ivCursor)
         viewCursorRipple = findViewById(R.id.viewCursorRipple)
         cvContextMenu = findViewById(R.id.cvContextMenu)
 
@@ -240,7 +247,6 @@ class ExternalActivity : AppCompatActivity() {
             screenHeight = rootContainer.height.toFloat()
             cursorX = screenWidth / 2f
             cursorY = screenHeight / 2f
-            ivCursor.visibility = View.GONE
 
             val tvExtHeader = findViewById<TextView>(R.id.tvExtHeader)
             if (tvExtHeader != null) {
@@ -272,12 +278,12 @@ class ExternalActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnNotesClose).setOnClickListener { closeVirtualApps() }
         findViewById<View>(R.id.btnMapClose).setOnClickListener { closeVirtualApps() }
 
-        findViewById<View>(R.id.btnExtNavBack).setOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        findViewById<View>(R.id.btnExtNavBack).setOnClickListener { handleBackNavigation() }
         findViewById<View>(R.id.btnExtNavHome).setOnClickListener { returnToDesktop() }
 
         findViewById<View>(R.id.tvContextBack).setOnClickListener {
             cvContextMenu.visibility = View.GONE
-            onBackPressedDispatcher.onBackPressed()
+            handleBackNavigation()
         }
         findViewById<View>(R.id.tvContextHome).setOnClickListener {
             cvContextMenu.visibility = View.GONE
@@ -556,6 +562,30 @@ class ExternalActivity : AppCompatActivity() {
         }
     }
 
+    private fun handleBackNavigation() {
+        if (cvContextMenu.visibility == View.VISIBLE) {
+            cvContextMenu.visibility = View.GONE
+            return
+        }
+        if (layoutStartMenu.visibility == View.VISIBLE) {
+            layoutStartMenu.visibility = View.GONE
+            return
+        }
+        if (virtualAppContainer.visibility == View.VISIBLE) {
+            returnToDesktop()
+            return
+        }
+        // When on clean desktop: do nothing to prevent exiting ExternalActivity or going back to background apps
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            handleBackNavigation()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     private fun returnToDesktop() {
         closeVirtualApps()
         layoutStartMenu.visibility = View.GONE
@@ -563,6 +593,7 @@ class ExternalActivity : AppCompatActivity() {
         launcherContainer.visibility = View.VISIBLE
         applyBackgroundTheme()
         InteractionBridge.sendPipStateChanged(false)
+        InteractionBridge.sendForegroundPackageChanged(packageName)
     }
 
     private fun setupInteractionBridge() {
@@ -677,6 +708,10 @@ class ExternalActivity : AppCompatActivity() {
 
         InteractionBridge.homeRequestListener = {
             returnToDesktop()
+        }
+
+        InteractionBridge.backRequestListener = {
+            handleBackNavigation()
         }
     }
 

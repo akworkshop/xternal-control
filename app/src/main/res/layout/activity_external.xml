@@ -563,20 +563,12 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- 5. Cursor, Ripple & Context Menu -->
-    <ImageView
-        android:id="@+id/ivCursor"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:src="@drawable/bg_cursor"
-        android:elevation="99dp"
-        android:visibility="gone" />
-
+    <!-- 5. Touch Ripple & Context Menu -->
     <View
         android:id="@+id/viewCursorRipple"
         android:layout_width="40dp"
         android:layout_height="40dp"
-        android:background="@drawable/bg_cursor"
+        android:background="@drawable/bg_touch_ripple"
         android:alpha="0"
         android:elevation="98dp" />
 
