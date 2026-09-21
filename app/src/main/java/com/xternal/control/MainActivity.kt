@@ -348,7 +348,7 @@ class MainActivity : AppCompatActivity() {
 
         btnToggleCursor.setOnClickListener {
             // Instantly hide and completely detach the cursor overlay to let DRM play
-            hideOverlayCursor(completelyDetach = true)
+            hideOverlayCursor()
             Toast.makeText(this, "DRM Play Active (Cursor hidden)", Toast.LENGTH_SHORT).show()
         }
 
@@ -676,7 +676,7 @@ class MainActivity : AppCompatActivity() {
         tvTrackpadInstruction.visibility = View.VISIBLE
         viewCursorMirror.visibility = View.GONE
         cursorHideHandler.removeCallbacks(cursorHideRunnable)
-        hideOverlayCursor(completelyDetach = true)
+        hideOverlayCursor()
         runOnUiThread {
             overlayCursorView = null
             overlayWindowManager = null
@@ -723,7 +723,8 @@ class MainActivity : AppCompatActivity() {
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                                WindowManager.LayoutParams.FLAG_SECURE,
                         PixelFormat.TRANSLUCENT
                     ).apply {
                         gravity = Gravity.TOP or Gravity.START
@@ -748,24 +749,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun hideOverlayCursor(completelyDetach: Boolean = false) {
+    private fun hideOverlayCursor() {
         runOnUiThread {
             try {
-                if (completelyDetach) {
-                    // For DRM Play mode or display disconnect: completely detach from WindowManager
-                    if (isCursorWindowAttached && overlayCursorView != null && overlayWindowManager != null) {
-                        overlayWindowManager?.removeView(overlayCursorView)
-                    }
-                    isCursorWindowAttached = false
-                } else {
-                    // For idle timeout: hide view and zero alpha to keep hardware compositor clean without leaving ghost frames
-                    overlayCursorView?.let { view ->
-                        view.alpha = 0f
-                        view.visibility = View.GONE
-                    }
+                if (isCursorWindowAttached && overlayCursorView != null && overlayWindowManager != null) {
+                    overlayWindowManager?.removeView(overlayCursorView)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+            } finally {
+                isCursorWindowAttached = false
             }
         }
     }
@@ -796,6 +789,7 @@ class MainActivity : AppCompatActivity() {
         }
         isDesktopActive = false
         lastLaunchedExternalPackage = packageName
+        hideOverlayCursor()
         // Track recents: move to start
         recentPackages.remove(packageName)
         recentPackages.add(0, packageName)
@@ -1467,6 +1461,7 @@ class MainActivity : AppCompatActivity() {
         if (targetPackage.isEmpty() || targetPackage == packageName) {
             return
         }
+        hideOverlayCursor()
         var appLaunched = false
         if (externalDisplayId != -1) {
             when {
