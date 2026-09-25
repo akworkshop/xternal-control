@@ -213,6 +213,8 @@ class MainActivity : AppCompatActivity() {
 
         checkAndShowOnboardingGuide()
         checkAndShowDonationPrompt()
+        setupPlaystoreReviewCard()
+        checkAndShowPlaystoreRatingPrompt()
     }
 
     override fun onResume() {
@@ -1013,6 +1015,97 @@ class MainActivity : AppCompatActivity() {
                     .edit()
                     .putBoolean("dont_show_donation", true)
                     .apply()
+            }
+            .show()
+    }
+
+    private fun setupPlaystoreReviewCard() {
+        val cardPlaystoreReview = findViewById<View>(R.id.cardPlaystoreReview)
+        if (BuildConfig.FLAVOR == "playstore") {
+            cardPlaystoreReview?.visibility = View.VISIBLE
+            findViewById<View>(R.id.btnRateApp)?.setOnClickListener {
+                openPlayStoreRating()
+            }
+            findViewById<View>(R.id.btnSendFeedback)?.setOnClickListener {
+                sendFeedbackEmail()
+            }
+        } else {
+            cardPlaystoreReview?.visibility = View.GONE
+        }
+    }
+
+    private fun openPlayStoreRating() {
+        val targetPackage = if (packageName.endsWith(".play")) packageName else "$packageName.play"
+        try {
+            val uri = Uri.parse("market://details?id=$targetPackage")
+            val goToMarket = Intent(Intent.ACTION_VIEW, uri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY or Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            }
+            startActivity(goToMarket)
+        } catch (e: Exception) {
+            val webUri = Uri.parse("https://play.google.com/store/apps/details?id=$targetPackage")
+            startActivity(Intent(Intent.ACTION_VIEW, webUri))
+        }
+    }
+
+    private fun sendFeedbackEmail() {
+        try {
+            val displayInfo = if (externalDisplayId != -1) {
+                "ID: $externalDisplayId, Res: ${externalDisplayWidth}x${externalDisplayHeight}"
+            } else {
+                "None connected"
+            }
+            val subject = "Feedback: Xternal Control v${BuildConfig.VERSION_NAME}"
+            val body = """
+                
+                
+                --- Device Diagnostics ---
+                App Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})
+                Flavor: ${BuildConfig.FLAVOR}
+                Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}
+                Android Version: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})
+                External Screen: $displayInfo
+            """.trimIndent()
+
+            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                data = Uri.parse("mailto:")
+                putExtra(Intent.EXTRA_EMAIL, arrayOf("arkay107@gmail.com"))
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, body)
+            }
+            startActivity(Intent.createChooser(intent, "Send Feedback"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "No email app found to send feedback", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun checkAndShowPlaystoreRatingPrompt() {
+        if (BuildConfig.FLAVOR != "playstore") return
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        val hasRatedOrDismissed = prefs.getBoolean("has_rated_or_dismissed", false)
+        if (hasRatedOrDismissed) return
+
+        val launchCount = prefs.getInt("playstore_launch_count", 0) + 1
+        prefs.edit().putInt("playstore_launch_count", launchCount).apply()
+
+        // Prompt on the 4th launch, and then every 8 launches if skipped
+        if (launchCount == 4 || (launchCount > 4 && (launchCount - 4) % 8 == 0)) {
+            showPlaystoreRatingDialog()
+        }
+    }
+
+    private fun showPlaystoreRatingDialog() {
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Enjoying Xternal Control?")
+            .setMessage("If Xternal Control is helping you get a great desktop experience on your XR glasses or screen, please take a moment to rate us on Google Play. Your review directly helps us improve and support more devices!")
+            .setPositiveButton("⭐ Rate on Google Play") { _, _ ->
+                prefs.edit().putBoolean("has_rated_or_dismissed", true).apply()
+                openPlayStoreRating()
+            }
+            .setNegativeButton("Maybe Later", null)
+            .setNeutralButton("Don't Ask Again") { _, _ ->
+                prefs.edit().putBoolean("has_rated_or_dismissed", true).apply()
             }
             .show()
     }
