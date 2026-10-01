@@ -33,6 +33,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.LinearLayout
@@ -87,8 +88,32 @@ class MainActivity : AppCompatActivity() {
     // Audio & Multimedia Management
     private lateinit var audioManager: AudioManager
     private var audioPlaybackCallback: AudioManager.AudioPlaybackCallback? = null
+    private var tvMediaTitle: TextView? = null
+    private var tvMediaArtist: TextView? = null
     private var tvMediaStatusDot: View? = null
     private var tvMediaStatusLabel: TextView? = null
+    private var tvMediaTimeElapsed: TextView? = null
+    private var pbMediaProgress: ProgressBar? = null
+    private var tvMediaTimeTotal: TextView? = null
+    private var btnMediaHeart: TextView? = null
+    private var btnMediaPlayPause: TextView? = null
+    private var isMediaHearted: Boolean = false
+    private var mediaElapsedSeconds: Int = 0
+    private var activeMediaPackage: String = ""
+    private val mediaProgressHandler = Handler(Looper.getMainLooper())
+    private val mediaProgressRunnable = object : Runnable {
+        override fun run() {
+            if (::audioManager.isInitialized && audioManager.isMusicActive) {
+                mediaElapsedSeconds++
+                val mins = mediaElapsedSeconds / 60
+                val secs = mediaElapsedSeconds % 60
+                tvMediaTimeElapsed?.text = String.format("%d:%02d", mins, secs)
+                val progress = (mediaElapsedSeconds * 2) % 100
+                pbMediaProgress?.progress = progress
+                mediaProgressHandler.postDelayed(this, 1000)
+            }
+        }
+    }
 
     // Recycler Adapter
     private lateinit var appAdapter: AppListAdapter
@@ -1128,13 +1153,44 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupMediaControls() {
+        tvMediaTitle = findViewById(R.id.tvMediaTitle)
+        tvMediaArtist = findViewById(R.id.tvMediaArtist)
         tvMediaStatusDot = findViewById(R.id.tvMediaStatusDot)
         tvMediaStatusLabel = findViewById(R.id.tvMediaStatusLabel)
+        tvMediaTimeElapsed = findViewById(R.id.tvMediaTimeElapsed)
+        pbMediaProgress = findViewById(R.id.pbMediaProgress)
+        tvMediaTimeTotal = findViewById(R.id.tvMediaTimeTotal)
+        btnMediaHeart = findViewById(R.id.btnMediaHeart)
+        btnMediaPlayPause = findViewById(R.id.btnMediaPlayPause)
+
+        btnMediaHeart?.setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            isMediaHearted = !isMediaHearted
+            if (isMediaHearted) {
+                btnMediaHeart?.text = "♥"
+                btnMediaHeart?.setTextColor(ContextCompat.getColor(this, R.color.neon_pink))
+                Toast.makeText(this, "Added to Favorites ❤️", Toast.LENGTH_SHORT).show()
+            } else {
+                btnMediaHeart?.text = "♡"
+                btnMediaHeart?.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+                Toast.makeText(this, "Removed from Favorites", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         val btnMediaRewind = findViewById<View>(R.id.btnMediaRewind)
         btnMediaRewind?.setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            // 1. Dispatch both standard skip backward and rewind key codes
+            sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD)
             sendMediaKey(KeyEvent.KEYCODE_MEDIA_REWIND)
+
+            // 2. Dispatch accessibility gesture (double tap left side of screen for video apps like Gallery/YouTube)
+            ControllerAccessibilityService.instance?.performMediaAction(
+                ControllerAccessibilityService.MediaAction.REWIND,
+                externalDisplayId,
+                externalDisplayWidth,
+                externalDisplayHeight
+            )
             Toast.makeText(this, "⏪ Rewind 10s", Toast.LENGTH_SHORT).show()
         }
         btnMediaRewind?.setOnLongClickListener { v ->
@@ -1144,10 +1200,18 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        val btnMediaPlayPause = findViewById<View>(R.id.btnMediaPlayPause)
         btnMediaPlayPause?.setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            // 1. Dispatch standard play/pause
             sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+
+            // 2. Dispatch accessibility action (finds play/pause nodes or taps center of video)
+            ControllerAccessibilityService.instance?.performMediaAction(
+                ControllerAccessibilityService.MediaAction.PLAY_PAUSE,
+                externalDisplayId,
+                externalDisplayWidth,
+                externalDisplayHeight
+            )
             v.postDelayed({
                 checkCurrentMediaPlayback()
             }, 300)
@@ -1156,7 +1220,17 @@ class MainActivity : AppCompatActivity() {
         val btnMediaForward = findViewById<View>(R.id.btnMediaForward)
         btnMediaForward?.setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            // 1. Dispatch both standard skip forward and fast forward key codes
+            sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD)
             sendMediaKey(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)
+
+            // 2. Dispatch accessibility gesture (double tap right side of screen for video apps like Gallery/YouTube)
+            ControllerAccessibilityService.instance?.performMediaAction(
+                ControllerAccessibilityService.MediaAction.FAST_FORWARD,
+                externalDisplayId,
+                externalDisplayWidth,
+                externalDisplayHeight
+            )
             Toast.makeText(this, "⏩ Forward 10s", Toast.LENGTH_SHORT).show()
         }
         btnMediaForward?.setOnLongClickListener { v ->
@@ -1164,6 +1238,16 @@ class MainActivity : AppCompatActivity() {
             sendMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
             Toast.makeText(this, "⏭️ Next Track/Video", Toast.LENGTH_SHORT).show()
             true
+        }
+
+        val btnMediaVolume = findViewById<View>(R.id.btnMediaVolume)
+        btnMediaVolume?.setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            try {
+                audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -1182,7 +1266,30 @@ class MainActivity : AppCompatActivity() {
             }
             audioManager.registerAudioPlaybackCallback(audioPlaybackCallback!!, Handler(Looper.getMainLooper()))
         }
+
+        // Listen for foreground app changes to display active media app name
+        InteractionBridge.foregroundPackageChangedListener = { pkg ->
+            updateMediaAppInfo(pkg)
+        }
+
         checkCurrentMediaPlayback()
+    }
+
+    private fun updateMediaAppInfo(pkg: String) {
+        if (pkg.isEmpty() || pkg == packageName) return
+        activeMediaPackage = pkg
+        try {
+            val pm = packageManager
+            val appInfo = pm.getApplicationInfo(pkg, 0)
+            val label = pm.getApplicationLabel(appInfo).toString()
+            runOnUiThread {
+                tvMediaTitle?.text = label
+            }
+        } catch (e: Exception) {
+            runOnUiThread {
+                tvMediaTitle?.text = "Media Controller"
+            }
+        }
     }
 
     private fun checkCurrentMediaPlayback() {
@@ -1199,17 +1306,33 @@ class MainActivity : AppCompatActivity() {
             tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
             tvMediaStatusLabel?.text = "PLAYING"
             tvMediaStatusLabel?.setTextColor(ContextCompat.getColor(this, R.color.neon_emerald))
+            btnMediaPlayPause?.text = "⏸"
+            btnMediaPlayPause?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
+            btnMediaPlayPause?.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
+
+            val subtitle = if (externalDisplayId != -1) "Playing on Glasses / Display" else "Playback Active"
+            tvMediaArtist?.text = subtitle
+
+            mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
+            mediaProgressHandler.post(mediaProgressRunnable)
         } else {
             tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.text_secondary)
-            tvMediaStatusLabel?.text = "MEDIA IDLE"
+            tvMediaStatusLabel?.text = "IDLE"
             tvMediaStatusLabel?.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            btnMediaPlayPause?.text = "▶"
+            btnMediaPlayPause?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_cyan)
+            btnMediaPlayPause?.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
+
+            tvMediaArtist?.text = "Ready for playback"
+            mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
         }
     }
 
     private fun sendMediaKey(keyCode: Int) {
         try {
-            val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
-            val upEvent = KeyEvent(KeyEvent.ACTION_UP, keyCode)
+            val now = SystemClock.uptimeMillis()
+            val downEvent = KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0)
+            val upEvent = KeyEvent(now, now + 10, KeyEvent.ACTION_UP, keyCode, 0)
             audioManager.dispatchMediaKeyEvent(downEvent)
             audioManager.dispatchMediaKeyEvent(upEvent)
         } catch (e: Exception) {
@@ -1938,6 +2061,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
         if (::billingManager.isInitialized) {
             billingManager.destroy()
         }
