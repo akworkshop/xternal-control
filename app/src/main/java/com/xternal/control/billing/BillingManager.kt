@@ -4,6 +4,8 @@ import android.app.Activity
 
 interface BillingManager {
     fun initialize(onProStatusChanged: ((Boolean) -> Unit)? = null)
+    fun addProStatusListener(listener: (Boolean) -> Unit) {}
+    fun removeProStatusListener(listener: (Boolean) -> Unit) {}
     fun isProActive(): Boolean
     fun purchasePro(activity: Activity)
     fun restorePurchases(activity: Activity? = null)

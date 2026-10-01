@@ -18,6 +18,12 @@ class GithubBillingManager(private val context: Context) : BillingManager {
         }
     }
 
+    override fun addProStatusListener(listener: (Boolean) -> Unit) {
+        mainHandler.post {
+            listener.invoke(true)
+        }
+    }
+
     override fun isProActive(): Boolean = true
 
     override fun purchasePro(activity: Activity) {

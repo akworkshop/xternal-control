@@ -706,6 +706,104 @@
                 </FrameLayout>
             </androidx.cardview.widget.CardView>
 
+            <!-- Multimedia Controls Bar -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardMediaControls"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginBottom="8dp"
+                app:cardCornerRadius="12dp"
+                app:cardBackgroundColor="@color/bg_panel">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="12dp">
+
+                    <!-- Media status badge / label -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/tvMediaStatusDot"
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/bg_rounded_search"
+                            android:backgroundTint="@color/text_secondary" />
+
+                        <TextView
+                            android:id="@+id/tvMediaStatusLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text="MEDIA IDLE"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.06" />
+                    </LinearLayout>
+
+                    <!-- Media Buttons -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:orientation="horizontal"
+                        android:gravity="center">
+
+                        <!-- Rewind -10s (Hold for Prev) -->
+                        <TextView
+                            android:id="@+id/btnMediaRewind"
+                            android:layout_width="54dp"
+                            android:layout_height="32dp"
+                            android:background="@drawable/bg_rounded_search"
+                            android:gravity="center"
+                            android:text="⏮️ -10s"
+                            android:textColor="@color/text_primary"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:clickable="true"
+                            android:focusable="true" />
+
+                        <!-- Play / Pause -->
+                        <TextView
+                            android:id="@+id/btnMediaPlayPause"
+                            android:layout_width="44dp"
+                            android:layout_height="32dp"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_rounded_search"
+                            android:backgroundTint="@color/glass_white_fill_active"
+                            android:gravity="center"
+                            android:text="⏯️"
+                            android:textColor="@color/neon_cyan"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:clickable="true"
+                            android:focusable="true" />
+
+                        <!-- Fast Forward +10s (Hold for Next) -->
+                        <TextView
+                            android:id="@+id/btnMediaForward"
+                            android:layout_width="54dp"
+                            android:layout_height="32dp"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_rounded_search"
+                            android:gravity="center"
+                            android:text="+10s ⏭️"
+                            android:textColor="@color/text_primary"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </LinearLayout>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
             <!-- Navigation buttons at bottom -->
             <LinearLayout
                 android:id="@+id/trackpadNavLayout"

@@ -16,6 +16,10 @@ import android.graphics.PixelFormat
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
+import android.media.AudioManager
+import android.media.AudioPlaybackConfiguration
+import android.view.KeyEvent
+import android.view.HapticFeedbackConstants
 import android.view.Display
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -79,6 +83,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnDonate: Button
     private lateinit var billingManager: BillingManager
     private var backPressedTime = 0L
+
+    // Audio & Multimedia Management
+    private lateinit var audioManager: AudioManager
+    private var audioPlaybackCallback: AudioManager.AudioPlaybackCallback? = null
+    private var tvMediaStatusDot: View? = null
+    private var tvMediaStatusLabel: TextView? = null
 
     // Recycler Adapter
     private lateinit var appAdapter: AppListAdapter
@@ -215,6 +225,8 @@ class MainActivity : AppCompatActivity() {
         checkAndShowDonationPrompt()
         setupPlaystoreReviewCard()
         checkAndShowPlaystoreRatingPrompt()
+        setupMediaControls()
+        setupMediaDetection()
     }
 
     override fun onResume() {
@@ -222,6 +234,11 @@ class MainActivity : AppCompatActivity() {
         checkPermissions()
         checkAndShowTrialExpiredDialog()
         updateProUi()
+        applyPlayStoreAppRestrictions()
+        sortAndRefreshAppLists()
+        if (::audioManager.isInitialized) {
+            checkCurrentMediaPlayback()
+        }
     }
 
     private fun initViews() {
@@ -1110,6 +1127,96 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun setupMediaControls() {
+        tvMediaStatusDot = findViewById(R.id.tvMediaStatusDot)
+        tvMediaStatusLabel = findViewById(R.id.tvMediaStatusLabel)
+
+        val btnMediaRewind = findViewById<View>(R.id.btnMediaRewind)
+        btnMediaRewind?.setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            sendMediaKey(KeyEvent.KEYCODE_MEDIA_REWIND)
+            Toast.makeText(this, "⏪ Rewind 10s", Toast.LENGTH_SHORT).show()
+        }
+        btnMediaRewind?.setOnLongClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            sendMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+            Toast.makeText(this, "⏮️ Previous Track/Video", Toast.LENGTH_SHORT).show()
+            true
+        }
+
+        val btnMediaPlayPause = findViewById<View>(R.id.btnMediaPlayPause)
+        btnMediaPlayPause?.setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            v.postDelayed({
+                checkCurrentMediaPlayback()
+            }, 300)
+        }
+
+        val btnMediaForward = findViewById<View>(R.id.btnMediaForward)
+        btnMediaForward?.setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            sendMediaKey(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)
+            Toast.makeText(this, "⏩ Forward 10s", Toast.LENGTH_SHORT).show()
+        }
+        btnMediaForward?.setOnLongClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            sendMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
+            Toast.makeText(this, "⏭️ Next Track/Video", Toast.LENGTH_SHORT).show()
+            true
+        }
+    }
+
+    private fun setupMediaDetection() {
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            audioPlaybackCallback = object : AudioManager.AudioPlaybackCallback() {
+                override fun onPlaybackConfigChanged(configs: List<AudioPlaybackConfiguration>) {
+                    runOnUiThread {
+                        checkCurrentMediaPlayback()
+                    }
+                    window?.decorView?.postDelayed({
+                        checkCurrentMediaPlayback()
+                    }, 200)
+                }
+            }
+            audioManager.registerAudioPlaybackCallback(audioPlaybackCallback!!, Handler(Looper.getMainLooper()))
+        }
+        checkCurrentMediaPlayback()
+    }
+
+    private fun checkCurrentMediaPlayback() {
+        val active = try {
+            audioManager.isMusicActive
+        } catch (e: Exception) {
+            false
+        }
+        updateMediaPlaybackUi(active)
+    }
+
+    private fun updateMediaPlaybackUi(isPlaying: Boolean) {
+        if (isPlaying) {
+            tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
+            tvMediaStatusLabel?.text = "PLAYING"
+            tvMediaStatusLabel?.setTextColor(ContextCompat.getColor(this, R.color.neon_emerald))
+        } else {
+            tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.text_secondary)
+            tvMediaStatusLabel?.text = "MEDIA IDLE"
+            tvMediaStatusLabel?.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+        }
+    }
+
+    private fun sendMediaKey(keyCode: Int) {
+        try {
+            val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
+            val upEvent = KeyEvent(KeyEvent.ACTION_UP, keyCode)
+            audioManager.dispatchMediaKeyEvent(downEvent)
+            audioManager.dispatchMediaKeyEvent(upEvent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun checkAndShowOnboardingGuide() {
         val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
         val hasSeen = prefs.getBoolean("has_seen_onboarding_guide", false)
@@ -1822,6 +1929,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            audioPlaybackCallback?.let {
+                try {
+                    audioManager.unregisterAudioPlaybackCallback(it)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
         if (::billingManager.isInitialized) {
             billingManager.destroy()
         }

@@ -17,12 +17,12 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
 
     private var billingClient: BillingClient? = null
     private var proProductDetails: ProductDetails? = null
-    private var statusCallback: ((Boolean) -> Unit)? = null
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<(Boolean) -> Unit>()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val trialManager = PlaystoreTrialManager(appContext)
 
     override fun initialize(onProStatusChanged: ((Boolean) -> Unit)?) {
-        statusCallback = onProStatusChanged
+        onProStatusChanged?.let { addProStatusListener(it) }
 
         billingClient = BillingClient.newBuilder(appContext)
             .setListener(this)
@@ -259,14 +259,31 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
         }
     }
 
+    override fun addProStatusListener(listener: (Boolean) -> Unit) {
+        if (!listeners.contains(listener)) {
+            listeners.add(listener)
+        }
+    }
+
+    override fun removeProStatusListener(listener: (Boolean) -> Unit) {
+        listeners.remove(listener)
+    }
+
     private fun updateProStatus(active: Boolean) {
         prefs.edit().putBoolean(BillingManager.KEY_IS_PRO, active).apply()
         mainHandler.post {
-            statusCallback?.invoke(active)
+            for (listener in listeners) {
+                try {
+                    listener.invoke(active)
+                } catch (e: Throwable) {
+                    Log.e(tag, "Error notifying billing listener", e)
+                }
+            }
         }
     }
 
     override fun destroy() {
+        listeners.clear()
         billingClient?.endConnection()
         billingClient = null
     }
