@@ -95,9 +95,7 @@ class MainActivity : AppCompatActivity() {
     private var tvMediaTimeElapsed: TextView? = null
     private var pbMediaProgress: ProgressBar? = null
     private var tvMediaTimeTotal: TextView? = null
-    private var btnMediaHeart: TextView? = null
     private var btnMediaPlayPause: TextView? = null
-    private var isMediaHearted: Boolean = false
     private var mediaElapsedSeconds: Int = 0
     private var activeMediaPackage: String = ""
     private val mediaProgressHandler = Handler(Looper.getMainLooper())
@@ -1160,22 +1158,7 @@ class MainActivity : AppCompatActivity() {
         tvMediaTimeElapsed = findViewById(R.id.tvMediaTimeElapsed)
         pbMediaProgress = findViewById(R.id.pbMediaProgress)
         tvMediaTimeTotal = findViewById(R.id.tvMediaTimeTotal)
-        btnMediaHeart = findViewById(R.id.btnMediaHeart)
         btnMediaPlayPause = findViewById(R.id.btnMediaPlayPause)
-
-        btnMediaHeart?.setOnClickListener { v ->
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            isMediaHearted = !isMediaHearted
-            if (isMediaHearted) {
-                btnMediaHeart?.text = "♥"
-                btnMediaHeart?.setTextColor(ContextCompat.getColor(this, R.color.neon_pink))
-                Toast.makeText(this, "Added to Favorites ❤️", Toast.LENGTH_SHORT).show()
-            } else {
-                btnMediaHeart?.text = "♡"
-                btnMediaHeart?.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-                Toast.makeText(this, "Removed from Favorites", Toast.LENGTH_SHORT).show()
-            }
-        }
 
         val btnMediaRewind = findViewById<View>(R.id.btnMediaRewind)
         btnMediaRewind?.setOnClickListener { v ->

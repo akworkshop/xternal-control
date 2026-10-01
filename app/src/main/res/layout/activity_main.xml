@@ -836,18 +836,10 @@
                         android:gravity="center_vertical"
                         android:layout_marginTop="5dp">
 
-                        <!-- Heart / Like -->
-                        <TextView
-                            android:id="@+id/btnMediaHeart"
+                        <!-- Left balancing spacer matching volume button width -->
+                        <View
                             android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:gravity="center"
-                            android:text="♡"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="16sp"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:background="@drawable/bg_rounded_search" />
+                            android:layout_height="0dp" />
 
                         <View
                             android:layout_width="0dp"
