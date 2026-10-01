@@ -789,13 +789,15 @@
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- Middle Row: Progress Bar with elapsed & total times -->
+                    <!-- Middle Row: Progress Bar with elapsed & total times (Visible only when real player time is detected) -->
                     <LinearLayout
+                        android:id="@+id/layoutMediaTimeline"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginTop="5dp">
+                        android:layout_marginTop="5dp"
+                        android:visibility="gone">
 
                         <TextView
                             android:id="@+id/tvMediaTimeElapsed"
@@ -828,13 +830,13 @@
                             android:textStyle="bold" />
                     </LinearLayout>
 
-                    <!-- Bottom Controls Row: Heart, Rewind, Play/Pause, Forward, Volume -->
+                    <!-- Bottom Controls Row: Rewind, Play/Pause, Forward, Volume -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginTop="5dp">
+                        android:layout_marginTop="6dp">
 
                         <!-- Left balancing spacer matching volume button width -->
                         <View
@@ -847,46 +849,43 @@
                             android:layout_weight="1" />
 
                         <!-- Rewind -10s (Hold for Prev) -->
-                        <TextView
+                        <ImageView
                             android:id="@+id/btnMediaRewind"
                             android:layout_width="44dp"
                             android:layout_height="32dp"
                             android:background="@drawable/bg_rounded_search"
-                            android:gravity="center"
-                            android:text="◀◀"
-                            android:textColor="@color/text_primary"
-                            android:textSize="13sp"
-                            android:textStyle="bold"
+                            android:src="@drawable/ic_media_rewind"
+                            app:tint="@color/text_primary"
+                            android:scaleType="centerInside"
+                            android:padding="6dp"
                             android:clickable="true"
                             android:focusable="true" />
 
-                        <!-- Play / Pause (Large prominent button) -->
-                        <TextView
+                        <!-- Play / Pause (Unified capsule button) -->
+                        <ImageView
                             android:id="@+id/btnMediaPlayPause"
-                            android:layout_width="46dp"
+                            android:layout_width="48dp"
                             android:layout_height="34dp"
                             android:layout_marginHorizontal="12dp"
                             android:background="@drawable/bg_rounded_search"
                             android:backgroundTint="@color/neon_cyan"
-                            android:gravity="center"
-                            android:text="▶"
-                            android:textColor="@color/text_dark"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
+                            android:src="@drawable/ic_media_play"
+                            app:tint="@color/text_dark"
+                            android:scaleType="centerInside"
+                            android:padding="6dp"
                             android:clickable="true"
                             android:focusable="true" />
 
                         <!-- Fast Forward +10s (Hold for Next) -->
-                        <TextView
+                        <ImageView
                             android:id="@+id/btnMediaForward"
                             android:layout_width="44dp"
                             android:layout_height="32dp"
                             android:background="@drawable/bg_rounded_search"
-                            android:gravity="center"
-                            android:text="▶▶"
-                            android:textColor="@color/text_primary"
-                            android:textSize="13sp"
-                            android:textStyle="bold"
+                            android:src="@drawable/ic_media_forward"
+                            app:tint="@color/text_primary"
+                            android:scaleType="centerInside"
+                            android:padding="6dp"
                             android:clickable="true"
                             android:focusable="true" />
 
@@ -896,17 +895,17 @@
                             android:layout_weight="1" />
 
                         <!-- Volume / Speaker -->
-                        <TextView
+                        <ImageView
                             android:id="@+id/btnMediaVolume"
                             android:layout_width="32dp"
                             android:layout_height="32dp"
-                            android:gravity="center"
-                            android:text="🔊"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="14sp"
+                            android:background="@drawable/bg_rounded_search"
+                            android:src="@drawable/ic_media_volume"
+                            app:tint="@color/text_secondary"
+                            android:scaleType="centerInside"
+                            android:padding="6dp"
                             android:clickable="true"
-                            android:focusable="true"
-                            android:background="@drawable/bg_rounded_search" />
+                            android:focusable="true" />
                     </LinearLayout>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>

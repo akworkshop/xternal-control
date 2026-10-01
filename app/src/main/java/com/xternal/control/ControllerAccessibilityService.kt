@@ -266,15 +266,14 @@ class ControllerAccessibilityService : AccessibilityService() {
         REWIND
     }
 
-    fun dispatchDoubleClick(displayId: Int, x: Float, y: Float): Boolean {
-        val clickPath = Path().apply {
-            moveTo(x, y)
+    fun dispatchHorizontalSwipe(displayId: Int, startX: Float, endX: Float, y: Float, durationMs: Long = 180): Boolean {
+        val path = Path().apply {
+            moveTo(startX, y)
+            lineTo(endX, y)
         }
-        val stroke1 = GestureDescription.StrokeDescription(clickPath, 0, 40)
-        val stroke2 = GestureDescription.StrokeDescription(clickPath, 120, 40)
+        val stroke = GestureDescription.StrokeDescription(path, 0, durationMs)
         val builder = GestureDescription.Builder().apply {
-            addStroke(stroke1)
-            addStroke(stroke2)
+            addStroke(stroke)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && displayId != -1) {
                 setDisplayId(displayId)
             }
@@ -295,7 +294,7 @@ class ControllerAccessibilityService : AccessibilityService() {
             if (clicked) return true
         }
 
-        // Step 2: Fallback to gesture injection on target display
+        // Step 2: Fallback to non-destructive gesture injection on target display
         val targetWidth = if (displayWidth > 0) displayWidth.toFloat() else 1920f
         val targetHeight = if (displayHeight > 0) displayHeight.toFloat() else 1080f
 
@@ -305,13 +304,73 @@ class ControllerAccessibilityService : AccessibilityService() {
                 dispatchClick(displayId, targetWidth * 0.5f, targetHeight * 0.5f)
             }
             MediaAction.FAST_FORWARD -> {
-                // Double tap on right 25% of screen skips 10s forward in YouTube, Gallery, VLC, etc.
-                dispatchDoubleClick(displayId, targetWidth * 0.75f, targetHeight * 0.5f)
+                // Smooth horizontal swipe rightwards scrubs video forward WITHOUT triggering zoom
+                dispatchHorizontalSwipe(displayId, targetWidth * 0.45f, targetWidth * 0.65f, targetHeight * 0.5f)
             }
             MediaAction.REWIND -> {
-                // Double tap on left 25% of screen skips 10s backward in YouTube, Gallery, VLC, etc.
-                dispatchDoubleClick(displayId, targetWidth * 0.25f, targetHeight * 0.5f)
+                // Smooth horizontal swipe leftwards scrubs video backward WITHOUT triggering zoom
+                dispatchHorizontalSwipe(displayId, targetWidth * 0.55f, targetWidth * 0.35f, targetHeight * 0.5f)
             }
+        }
+    }
+
+    data class MediaTimelineInfo(
+        val currentTime: String,
+        val totalTime: String,
+        val progressPercent: Int
+    )
+
+    fun queryActiveMediaTimeline(): MediaTimelineInfo? {
+        val roots = mutableListOf<AccessibilityNodeInfo>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            try {
+                windows?.forEach { win ->
+                    win.root?.let { roots.add(it) }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        rootInActiveWindow?.let { if (!roots.contains(it)) roots.add(it) }
+
+        val timeRegex = Regex("""\b(\d{1,2}:\d{2}(?::\d{2})?)\b""")
+        for (root in roots) {
+            val textList = mutableListOf<String>()
+            collectAllTexts(root, textList)
+            val matchedTimes = textList.flatMap { text ->
+                timeRegex.findAll(text).map { it.groupValues[1] }.toList()
+            }
+            if (matchedTimes.size >= 2) {
+                val cur = matchedTimes[0]
+                val tot = matchedTimes[1]
+                val curSecs = parseTimeToSeconds(cur)
+                val totSecs = parseTimeToSeconds(tot)
+                val pct = if (totSecs > 0) ((curSecs.toFloat() / totSecs) * 100).toInt().coerceIn(0, 100) else 0
+                return MediaTimelineInfo(cur, tot, pct)
+            }
+        }
+        return null
+    }
+
+    private fun collectAllTexts(node: AccessibilityNodeInfo?, list: MutableList<String>) {
+        if (node == null) return
+        val t = node.text?.toString()
+        if (!t.isNullOrBlank()) list.add(t)
+        val cd = node.contentDescription?.toString()
+        if (!cd.isNullOrBlank()) list.add(cd)
+        for (i in 0 until node.childCount) {
+            collectAllTexts(node.getChild(i), list)
+        }
+    }
+
+    private fun parseTimeToSeconds(timeStr: String): Int {
+        return try {
+            val parts = timeStr.split(":").map { it.toInt() }
+            if (parts.size == 2) parts[0] * 60 + parts[1]
+            else if (parts.size == 3) parts[0] * 3600 + parts[1] * 60 + parts[2]
+            else 0
+        } catch (e: Exception) {
+            0
         }
     }
 

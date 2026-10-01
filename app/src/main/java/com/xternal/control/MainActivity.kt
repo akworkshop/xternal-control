@@ -92,22 +92,17 @@ class MainActivity : AppCompatActivity() {
     private var tvMediaArtist: TextView? = null
     private var tvMediaStatusDot: View? = null
     private var tvMediaStatusLabel: TextView? = null
+    private var layoutMediaTimeline: View? = null
     private var tvMediaTimeElapsed: TextView? = null
     private var pbMediaProgress: ProgressBar? = null
     private var tvMediaTimeTotal: TextView? = null
-    private var btnMediaPlayPause: TextView? = null
-    private var mediaElapsedSeconds: Int = 0
+    private var btnMediaPlayPause: ImageView? = null
     private var activeMediaPackage: String = ""
     private val mediaProgressHandler = Handler(Looper.getMainLooper())
     private val mediaProgressRunnable = object : Runnable {
         override fun run() {
             if (::audioManager.isInitialized && audioManager.isMusicActive) {
-                mediaElapsedSeconds++
-                val mins = mediaElapsedSeconds / 60
-                val secs = mediaElapsedSeconds % 60
-                tvMediaTimeElapsed?.text = String.format("%d:%02d", mins, secs)
-                val progress = (mediaElapsedSeconds * 2) % 100
-                pbMediaProgress?.progress = progress
+                updateMediaTimelineFromPlayer()
                 mediaProgressHandler.postDelayed(this, 1000)
             }
         }
@@ -1150,11 +1145,17 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun isLocalVideoForeground(): Boolean {
+        val pkg = activeMediaPackage.lowercase()
+        return pkg.contains("gallery") || pkg.contains("video") || pkg.contains("photos")
+    }
+
     private fun setupMediaControls() {
         tvMediaTitle = findViewById(R.id.tvMediaTitle)
         tvMediaArtist = findViewById(R.id.tvMediaArtist)
         tvMediaStatusDot = findViewById(R.id.tvMediaStatusDot)
         tvMediaStatusLabel = findViewById(R.id.tvMediaStatusLabel)
+        layoutMediaTimeline = findViewById(R.id.layoutMediaTimeline)
         tvMediaTimeElapsed = findViewById(R.id.tvMediaTimeElapsed)
         pbMediaProgress = findViewById(R.id.pbMediaProgress)
         tvMediaTimeTotal = findViewById(R.id.tvMediaTimeTotal)
@@ -1163,18 +1164,19 @@ class MainActivity : AppCompatActivity() {
         val btnMediaRewind = findViewById<View>(R.id.btnMediaRewind)
         btnMediaRewind?.setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            // 1. Dispatch both standard skip backward and rewind key codes
-            sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD)
-            sendMediaKey(KeyEvent.KEYCODE_MEDIA_REWIND)
-
-            // 2. Dispatch accessibility gesture (double tap left side of screen for video apps like Gallery/YouTube)
-            ControllerAccessibilityService.instance?.performMediaAction(
-                ControllerAccessibilityService.MediaAction.REWIND,
-                externalDisplayId,
-                externalDisplayWidth,
-                externalDisplayHeight
-            )
-            Toast.makeText(this, "⏪ Rewind 10s", Toast.LENGTH_SHORT).show()
+            if (isLocalVideoForeground()) {
+                // Smooth horizontal scrub in Gallery/Video player - NO ZOOM!
+                ControllerAccessibilityService.instance?.performMediaAction(
+                    ControllerAccessibilityService.MediaAction.REWIND,
+                    externalDisplayId,
+                    externalDisplayWidth,
+                    externalDisplayHeight
+                )
+            } else {
+                sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD)
+                sendMediaKey(KeyEvent.KEYCODE_MEDIA_REWIND)
+            }
+            Toast.makeText(this, "⏪ Rewind", Toast.LENGTH_SHORT).show()
         }
         btnMediaRewind?.setOnLongClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -1185,16 +1187,19 @@ class MainActivity : AppCompatActivity() {
 
         btnMediaPlayPause?.setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            // 1. Dispatch standard play/pause
-            sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-
-            // 2. Dispatch accessibility action (finds play/pause nodes or taps center of video)
-            ControllerAccessibilityService.instance?.performMediaAction(
-                ControllerAccessibilityService.MediaAction.PLAY_PAUSE,
-                externalDisplayId,
-                externalDisplayWidth,
-                externalDisplayHeight
-            )
+            if (isLocalVideoForeground()) {
+                // ONLY control the foreground local video (e.g. Samsung Gallery)
+                // Do NOT send global media key that would wake up minimized YouTube in the background!
+                ControllerAccessibilityService.instance?.performMediaAction(
+                    ControllerAccessibilityService.MediaAction.PLAY_PAUSE,
+                    externalDisplayId,
+                    externalDisplayWidth,
+                    externalDisplayHeight
+                )
+            } else {
+                // Foreground is YouTube/Spotify/SBS or background media: dispatch standard media key
+                sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            }
             v.postDelayed({
                 checkCurrentMediaPlayback()
             }, 300)
@@ -1203,18 +1208,19 @@ class MainActivity : AppCompatActivity() {
         val btnMediaForward = findViewById<View>(R.id.btnMediaForward)
         btnMediaForward?.setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            // 1. Dispatch both standard skip forward and fast forward key codes
-            sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD)
-            sendMediaKey(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)
-
-            // 2. Dispatch accessibility gesture (double tap right side of screen for video apps like Gallery/YouTube)
-            ControllerAccessibilityService.instance?.performMediaAction(
-                ControllerAccessibilityService.MediaAction.FAST_FORWARD,
-                externalDisplayId,
-                externalDisplayWidth,
-                externalDisplayHeight
-            )
-            Toast.makeText(this, "⏩ Forward 10s", Toast.LENGTH_SHORT).show()
+            if (isLocalVideoForeground()) {
+                // Smooth horizontal scrub in Gallery/Video player - NO ZOOM!
+                ControllerAccessibilityService.instance?.performMediaAction(
+                    ControllerAccessibilityService.MediaAction.FAST_FORWARD,
+                    externalDisplayId,
+                    externalDisplayWidth,
+                    externalDisplayHeight
+                )
+            } else {
+                sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD)
+                sendMediaKey(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)
+            }
+            Toast.makeText(this, "⏩ Forward", Toast.LENGTH_SHORT).show()
         }
         btnMediaForward?.setOnLongClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -1275,6 +1281,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateMediaTimelineFromPlayer() {
+        val timeline = ControllerAccessibilityService.instance?.queryActiveMediaTimeline()
+        if (timeline != null) {
+            layoutMediaTimeline?.visibility = View.VISIBLE
+            tvMediaTimeElapsed?.text = timeline.currentTime
+            tvMediaTimeTotal?.text = timeline.totalTime
+            pbMediaProgress?.progress = timeline.progressPercent
+        } else {
+            layoutMediaTimeline?.visibility = View.GONE
+        }
+    }
+
     private fun checkCurrentMediaPlayback() {
         val active = try {
             audioManager.isMusicActive
@@ -1289,24 +1307,26 @@ class MainActivity : AppCompatActivity() {
             tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
             tvMediaStatusLabel?.text = "PLAYING"
             tvMediaStatusLabel?.setTextColor(ContextCompat.getColor(this, R.color.neon_emerald))
-            btnMediaPlayPause?.text = "⏸"
-            btnMediaPlayPause?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
-            btnMediaPlayPause?.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
+            
+            // Unified styling: identical vector icon, background, and tint
+            btnMediaPlayPause?.setImageResource(R.drawable.ic_media_pause)
 
             val subtitle = if (externalDisplayId != -1) "Playing on Glasses / Display" else "Playback Active"
             tvMediaArtist?.text = subtitle
 
+            updateMediaTimelineFromPlayer()
             mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
             mediaProgressHandler.post(mediaProgressRunnable)
         } else {
             tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.text_secondary)
             tvMediaStatusLabel?.text = "IDLE"
             tvMediaStatusLabel?.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-            btnMediaPlayPause?.text = "▶"
-            btnMediaPlayPause?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_cyan)
-            btnMediaPlayPause?.setTextColor(ContextCompat.getColor(this, R.color.text_dark))
+            
+            // Unified styling: identical vector icon, background, and tint
+            btnMediaPlayPause?.setImageResource(R.drawable.ic_media_play)
 
             tvMediaArtist?.text = "Ready for playback"
+            layoutMediaTimeline?.visibility = View.GONE
             mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
         }
     }
