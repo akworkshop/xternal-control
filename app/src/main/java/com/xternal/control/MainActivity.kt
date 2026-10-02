@@ -282,7 +282,7 @@ class MainActivity : AppCompatActivity() {
         tvPermNotification = findViewById(R.id.tvPermNotification)
         btnGrantNotification = findViewById(R.id.btnGrantNotification)
         btnGrantNotification?.setOnClickListener {
-            openNotificationAccessSettings()
+            showNotificationAccessDisclosureDialog()
         }
         cardMediaControls = findViewById(R.id.cardMediaControls)
         rvAppsHorizontal = findViewById(R.id.rvAppsHorizontal)
@@ -463,13 +463,11 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            if (!isDesktopActive) {
-                val service = ControllerAccessibilityService.instance
-                if (service != null && externalDisplayId != -1) {
-                    service.performBackOnDisplay(externalDisplayId, overlayCursorX, overlayCursorY)
-                } else if (service != null) {
-                    service.performBackAction()
-                }
+            val service = ControllerAccessibilityService.instance
+            if (service != null && externalDisplayId != -1) {
+                service.performBackOnDisplay(externalDisplayId)
+            } else if (service != null) {
+                service.performBackAction()
             }
         }
 
@@ -521,6 +519,25 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Deny", null)
             .setCancelable(false)
+            .show()
+    }
+
+    private fun showNotificationAccessDisclosureDialog() {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Media Remote Permission")
+            .setMessage(
+                "To control playback, sync song titles, and seek ±10s in media apps (YouTube, Spotify, SBS, etc.), Android requires 'Notification Access'.\n\n" +
+                "Why Android requires this:\n" +
+                "• Android's MediaSession architecture requires NotificationListenerService authorization to query active media sessions.\n" +
+                "• It allows Xternal Control to detect playing media, show live progress, and send universal seek commands.\n\n" +
+                "Privacy Guarantee:\n" +
+                "• Xternal Control DOES NOT read, store, or reply to your personal notifications or messages.\n" +
+                "• It is used strictly to communicate with media playback sessions."
+            )
+            .setPositiveButton("Open Settings") { _, _ ->
+                openNotificationAccessSettings()
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
@@ -1236,7 +1253,6 @@ class MainActivity : AppCompatActivity() {
             val currentState = mediaRemoteManager.getCurrentState()
             if (currentState.hasActiveSession) {
                 mediaRemoteManager.seekRelative(-10_000)
-                Toast.makeText(this, "⏪ Rewind (-10s)", Toast.LENGTH_SHORT).show()
             } else {
                 val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
                 val service = ControllerAccessibilityService.instance
@@ -1252,7 +1268,6 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD)
                 }
-                Toast.makeText(this, "⏪ Rewind (-10s)", Toast.LENGTH_SHORT).show()
             }
         }
         btnMediaRewind?.setOnLongClickListener { v ->
@@ -1295,7 +1310,6 @@ class MainActivity : AppCompatActivity() {
             val currentState = mediaRemoteManager.getCurrentState()
             if (currentState.hasActiveSession) {
                 mediaRemoteManager.seekRelative(10_000)
-                Toast.makeText(this, "⏩ Forward (+10s)", Toast.LENGTH_SHORT).show()
             } else {
                 val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
                 val service = ControllerAccessibilityService.instance
@@ -1311,7 +1325,6 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD)
                 }
-                Toast.makeText(this, "⏩ Forward (+10s)", Toast.LENGTH_SHORT).show()
             }
         }
         btnMediaForward?.setOnLongClickListener { v ->

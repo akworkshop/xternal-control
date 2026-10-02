@@ -218,13 +218,13 @@ class ControllerAccessibilityService : AccessibilityService() {
         }
     }
 
-    fun performBackOnDisplay(displayId: Int, x: Float, y: Float) {
-        // Shift focus first using a tiny 1-pixel gesture
+    fun performBackOnDisplay(displayId: Int) {
+        // Shift focus safely to the target display at (0, 0) without clicking interactive views or video players
         val path = Path().apply {
-            moveTo(x, y)
-            lineTo(x, y + 1f)
+            moveTo(0f, 0f)
+            lineTo(0f, 1f)
         }
-        val stroke = GestureDescription.StrokeDescription(path, 0, 50)
+        val stroke = GestureDescription.StrokeDescription(path, 0, 20)
         val builder = GestureDescription.Builder().apply {
             addStroke(stroke)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && displayId > 0) {
@@ -250,6 +250,10 @@ class ControllerAccessibilityService : AccessibilityService() {
         if (!dispatched) {
             performGlobalAction(GLOBAL_ACTION_BACK)
         }
+    }
+
+    fun performBackOnDisplay(displayId: Int, x: Float, y: Float) {
+        performBackOnDisplay(displayId)
     }
 
     fun performRecentsOnDisplay(displayId: Int, x: Float, y: Float) {

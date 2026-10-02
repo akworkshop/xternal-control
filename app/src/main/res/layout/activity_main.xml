@@ -219,7 +219,7 @@
                                 app:cornerRadius="6dp" />
                         </LinearLayout>
 
-                        <!-- Media Remote (Notification Access) Row -->
+                        <!-- Media Remote (MediaSession / Notification Access) Row -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -227,14 +227,28 @@
                             android:gravity="center_vertical"
                             android:layout_marginTop="10dp">
 
-                            <TextView
-                                android:id="@+id/tvPermNotification"
+                            <LinearLayout
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="Media Remote: Disabled"
-                                android:textColor="@color/neon_warning"
-                                android:textSize="12sp" />
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/tvPermNotification"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Media Remote: Disabled"
+                                    android:textColor="@color/neon_warning"
+                                    android:textSize="12sp" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="Required for universal ±10s seeking (Android labels this as Notification Access, no personal messages are read)"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
 
                             <Button
                                 android:id="@+id/btnGrantNotification"
