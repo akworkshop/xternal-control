@@ -8,6 +8,7 @@ import com.xternal.control.billing.BillingManagerProvider
 import android.content.pm.PackageManager
 import android.hardware.display.DisplayManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.os.Handler
@@ -18,6 +19,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
+import android.media.AudioAttributes
 import android.view.KeyEvent
 import android.view.HapticFeedbackConstants
 import android.view.Display
@@ -353,6 +355,7 @@ class MainActivity : AppCompatActivity() {
                     if (Math.abs(totalDx) > threshold) {
                         val currentTime = System.currentTimeMillis()
                         if (currentTime - lastZoomTime > 300) {
+                            cvZoomSlider.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
                             val isZoomIn = totalDx > 0
                             InteractionBridge.sendZoom(isZoomIn)
                             val service = ControllerAccessibilityService.instance
@@ -375,22 +378,26 @@ class MainActivity : AppCompatActivity() {
         val btnTheaterMode = findViewById<View>(R.id.btnTheaterMode)
         val layoutTheaterModeOverlay = findViewById<View>(R.id.layoutTheaterModeOverlay)
 
-        btnTheaterMode.setOnClickListener {
+        btnTheaterMode.setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             enterTheaterMode()
         }
 
-        btnPipMode.setOnClickListener {
+        btnPipMode.setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             togglePipPassThrough()
         }
 
-        btnToggleCursor.setOnClickListener {
+        btnToggleCursor.setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             // Instantly hide and completely detach the cursor overlay to let DRM play
             hideOverlayCursor()
             Toast.makeText(this, "DRM Play Active (Cursor hidden)", Toast.LENGTH_SHORT).show()
         }
 
         val btnScreenshot = findViewById<View>(R.id.btnScreenshot)
-        btnScreenshot?.setOnClickListener {
+        btnScreenshot?.setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             val service = ControllerAccessibilityService.instance
             if (service != null && externalDisplayId != -1 && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 Toast.makeText(this, "Capturing external screen...", Toast.LENGTH_SHORT).show()
@@ -408,9 +415,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         var lastTheaterClickTime: Long = 0
-        layoutTheaterModeOverlay.setOnClickListener {
+        layoutTheaterModeOverlay.setOnClickListener { v ->
             val currentTime = System.currentTimeMillis()
             if (currentTime - lastTheaterClickTime < 300) {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
                 exitTheaterMode()
             }
             lastTheaterClickTime = currentTime
@@ -431,7 +439,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Bind controller bottom navigation bar remote buttons
-        findViewById<View>(R.id.btnMainBack).setOnClickListener {
+        findViewById<View>(R.id.btnMainBack).setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             val consumedByDesktopMenu = InteractionBridge.sendBackRequest()
             if (consumedByDesktopMenu) {
                 return@setOnClickListener
@@ -447,7 +456,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        findViewById<View>(R.id.btnMainHome).setOnClickListener {
+        findViewById<View>(R.id.btnMainHome).setOnClickListener { v ->
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             isDesktopActive = true
             updatePipButtonUi(false)
             InteractionBridge.sendPipMode(false)
@@ -1145,9 +1155,22 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun getMediaTargetDisplayInfo(): Triple<Int, Int, Int> {
+        val targetDisplayId = if (externalDisplayId != -1) externalDisplayId else Display.DEFAULT_DISPLAY
+        val dm = resources.displayMetrics
+        val targetW = if (externalDisplayId != -1 && externalDisplayWidth > 0) externalDisplayWidth else dm.widthPixels
+        val targetH = if (externalDisplayId != -1 && externalDisplayHeight > 0) externalDisplayHeight else dm.heightPixels
+        return Triple(targetDisplayId, targetW, targetH)
+    }
+
     private fun isLocalVideoForeground(): Boolean {
         val pkg = activeMediaPackage.lowercase()
         return pkg.contains("gallery") || pkg.contains("video") || pkg.contains("photos")
+    }
+
+    private fun isYouTubeForeground(): Boolean {
+        val pkg = activeMediaPackage.lowercase()
+        return pkg.contains("youtube")
     }
 
     private fun setupMediaControls() {
@@ -1163,67 +1186,74 @@ class MainActivity : AppCompatActivity() {
 
         val btnMediaRewind = findViewById<View>(R.id.btnMediaRewind)
         btnMediaRewind?.setOnClickListener { v ->
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            if (isLocalVideoForeground()) {
-                // Smooth horizontal scrub in Gallery/Video player - NO ZOOM!
-                ControllerAccessibilityService.instance?.performMediaAction(
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
+            val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
+            val service = ControllerAccessibilityService.instance
+
+            if (service != null && (isLocalVideoForeground() || isYouTubeForeground())) {
+                service.performMediaAction(
                     ControllerAccessibilityService.MediaAction.REWIND,
-                    externalDisplayId,
-                    externalDisplayWidth,
-                    externalDisplayHeight
+                    targetDisplayId,
+                    targetW,
+                    targetH,
+                    activeMediaPackage
                 )
             } else {
                 sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD)
-                sendMediaKey(KeyEvent.KEYCODE_MEDIA_REWIND)
             }
-            Toast.makeText(this, "⏪ Rewind", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "⏪ Rewind (-10s)", Toast.LENGTH_SHORT).show()
         }
         btnMediaRewind?.setOnLongClickListener { v ->
-            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             sendMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
             Toast.makeText(this, "⏮️ Previous Track/Video", Toast.LENGTH_SHORT).show()
             true
         }
 
         btnMediaPlayPause?.setOnClickListener { v ->
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
+            val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
+            val service = ControllerAccessibilityService.instance
+
             if (isLocalVideoForeground()) {
-                // ONLY control the foreground local video (e.g. Samsung Gallery)
+                // ONLY control the foreground local video (e.g. Samsung/Xiaomi Gallery)
                 // Do NOT send global media key that would wake up minimized YouTube in the background!
-                ControllerAccessibilityService.instance?.performMediaAction(
+                service?.performMediaAction(
                     ControllerAccessibilityService.MediaAction.PLAY_PAUSE,
-                    externalDisplayId,
-                    externalDisplayWidth,
-                    externalDisplayHeight
+                    targetDisplayId,
+                    targetW,
+                    targetH,
+                    activeMediaPackage
                 )
             } else {
                 // Foreground is YouTube/Spotify/SBS or background media: dispatch standard media key
                 sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
             }
-            v.postDelayed({
-                checkCurrentMediaPlayback()
-            }, 300)
+            v.postDelayed({ checkCurrentMediaPlayback() }, 300)
+            v.postDelayed({ checkCurrentMediaPlayback() }, 600)
         }
 
         val btnMediaForward = findViewById<View>(R.id.btnMediaForward)
         btnMediaForward?.setOnClickListener { v ->
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            if (isLocalVideoForeground()) {
-                // Smooth horizontal scrub in Gallery/Video player - NO ZOOM!
-                ControllerAccessibilityService.instance?.performMediaAction(
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
+            val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
+            val service = ControllerAccessibilityService.instance
+
+            if (service != null && (isLocalVideoForeground() || isYouTubeForeground())) {
+                service.performMediaAction(
                     ControllerAccessibilityService.MediaAction.FAST_FORWARD,
-                    externalDisplayId,
-                    externalDisplayWidth,
-                    externalDisplayHeight
+                    targetDisplayId,
+                    targetW,
+                    targetH,
+                    activeMediaPackage
                 )
             } else {
                 sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD)
-                sendMediaKey(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)
             }
-            Toast.makeText(this, "⏩ Forward", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "⏩ Forward (+10s)", Toast.LENGTH_SHORT).show()
         }
         btnMediaForward?.setOnLongClickListener { v ->
-            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             sendMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
             Toast.makeText(this, "⏭️ Next Track/Video", Toast.LENGTH_SHORT).show()
             true
@@ -1231,7 +1261,7 @@ class MainActivity : AppCompatActivity() {
 
         val btnMediaVolume = findViewById<View>(R.id.btnMediaVolume)
         btnMediaVolume?.setOnClickListener { v ->
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             try {
                 audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI)
             } catch (e: Exception) {
@@ -1250,15 +1280,10 @@ class MainActivity : AppCompatActivity() {
                     }
                     window?.decorView?.postDelayed({
                         checkCurrentMediaPlayback()
-                    }, 200)
+                    }, 250)
                 }
             }
             audioManager.registerAudioPlaybackCallback(audioPlaybackCallback!!, Handler(Looper.getMainLooper()))
-        }
-
-        // Listen for foreground app changes to display active media app name
-        InteractionBridge.foregroundPackageChangedListener = { pkg ->
-            updateMediaAppInfo(pkg)
         }
 
         checkCurrentMediaPlayback()
@@ -1268,6 +1293,16 @@ class MainActivity : AppCompatActivity() {
         if (pkg.isEmpty() || pkg == packageName) return
         activeMediaPackage = pkg
         try {
+            val isSystemOrLauncher = pkg.contains("launcher") || pkg.contains("home") || pkg.contains("systemui") || pkg.contains("settings")
+            if (isSystemOrLauncher) {
+                runOnUiThread {
+                    if (!isAudioActivelyPlaying()) {
+                        tvMediaTitle?.text = "Media Controller"
+                        tvMediaArtist?.text = "Ready for playback"
+                    }
+                }
+                return
+            }
             val pm = packageManager
             val appInfo = pm.getApplicationInfo(pkg, 0)
             val label = pm.getApplicationLabel(appInfo).toString()
@@ -1293,12 +1328,67 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkCurrentMediaPlayback() {
-        val active = try {
+    private fun isAudioActivelyPlaying(): Boolean {
+        // Step 1: Check active playback configurations (Android O / API 26+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val configs = audioManager.activePlaybackConfigurations
+                if (configs.isNotEmpty()) {
+                    var foundMediaStream = false
+                    val anyStreamStarted = configs.any { cfg ->
+                        val usage = cfg.audioAttributes?.usage ?: -1
+                        val isMediaUsage = (usage == AudioAttributes.USAGE_MEDIA ||
+                                           usage == AudioAttributes.USAGE_GAME ||
+                                           usage == AudioAttributes.USAGE_UNKNOWN)
+                        if (!isMediaUsage) return@any false
+                        foundMediaStream = true
+
+                        // In AOSP, AudioPlaybackConfiguration has @hide / @SystemApi isActive() or getPlayerState()
+                        val activeFlag = try {
+                            val method = cfg.javaClass.getMethod("isActive")
+                            method.invoke(cfg) as? Boolean
+                        } catch (e: Throwable) {
+                            null
+                        }
+
+                        if (activeFlag != null) {
+                            activeFlag
+                        } else {
+                            val state = try {
+                                val stateMethod = cfg.javaClass.getMethod("getPlayerState")
+                                stateMethod.invoke(cfg) as? Int ?: 0
+                            } catch (e: Throwable) {
+                                0
+                            }
+                            // 3 is PLAYER_STATE_STARTED in AudioPlaybackConfiguration
+                            state == 3
+                        }
+                    }
+                    if (anyStreamStarted) return true
+                    // If a media stream exists but none are in started/active state, playback is paused!
+                    if (foundMediaStream) return false
+                }
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
+
+        // Step 2: Check on-screen accessibility video controls (e.g. video playing in Gallery)
+        val videoState = ControllerAccessibilityService.instance?.queryVideoPlayingState()
+        if (videoState != null) {
+            return videoState
+        }
+
+        // Step 3: Fallback to AudioManager.isMusicActive for legacy Android
+        return try {
             audioManager.isMusicActive
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             false
         }
+    }
+
+    private fun checkCurrentMediaPlayback() {
+        val active = isAudioActivelyPlaying()
         updateMediaPlaybackUi(active)
     }
 
@@ -1744,6 +1834,10 @@ class MainActivity : AppCompatActivity() {
                     isDesktopActive = false
                     lastLaunchedExternalPackage = pkg
                 }
+                updateMediaAppInfo(pkg)
+                checkCurrentMediaPlayback()
+                window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 250)
+                window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 500)
             } catch (e: Throwable) {
                 e.printStackTrace()
             }

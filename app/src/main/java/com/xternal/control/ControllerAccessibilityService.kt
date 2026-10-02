@@ -5,6 +5,7 @@ import android.accessibilityservice.GestureDescription
 import android.content.Intent
 import android.graphics.Path
 import android.os.Build
+import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
@@ -97,7 +98,28 @@ class ControllerAccessibilityService : AccessibilityService() {
         val stroke = GestureDescription.StrokeDescription(clickPath, 0, 50)
         val builder = GestureDescription.Builder().apply {
             addStroke(stroke)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && displayId > 0) {
+                setDisplayId(displayId)
+            }
+        }
+        return try {
+            dispatchGesture(builder.build(), null, null)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    fun dispatchDoubleClick(displayId: Int, x: Float, y: Float): Boolean {
+        val clickPath = Path().apply {
+            moveTo(x, y)
+        }
+        val stroke1 = GestureDescription.StrokeDescription(clickPath, 0, 40)
+        val stroke2 = GestureDescription.StrokeDescription(clickPath, 120, 40)
+        val builder = GestureDescription.Builder().apply {
+            addStroke(stroke1)
+            addStroke(stroke2)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && displayId > 0) {
                 setDisplayId(displayId)
             }
         }
@@ -116,7 +138,7 @@ class ControllerAccessibilityService : AccessibilityService() {
         val stroke = GestureDescription.StrokeDescription(clickPath, 0, 800)
         val builder = GestureDescription.Builder().apply {
             addStroke(stroke)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && displayId > 0) {
                 setDisplayId(displayId)
             }
         }
@@ -136,7 +158,7 @@ class ControllerAccessibilityService : AccessibilityService() {
         val stroke = GestureDescription.StrokeDescription(swipePath, 0, 100)
         val builder = GestureDescription.Builder().apply {
             addStroke(stroke)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && displayId > 0) {
                 setDisplayId(displayId)
             }
         }
@@ -184,7 +206,7 @@ class ControllerAccessibilityService : AccessibilityService() {
         val builder = GestureDescription.Builder().apply {
             addStroke(stroke1)
             addStroke(stroke2)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && displayId > 0) {
                 setDisplayId(displayId)
             }
         }
@@ -205,7 +227,7 @@ class ControllerAccessibilityService : AccessibilityService() {
         val stroke = GestureDescription.StrokeDescription(path, 0, 50)
         val builder = GestureDescription.Builder().apply {
             addStroke(stroke)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && displayId > 0) {
                 setDisplayId(displayId)
             }
         }
@@ -239,7 +261,7 @@ class ControllerAccessibilityService : AccessibilityService() {
         val stroke = GestureDescription.StrokeDescription(path, 0, 50)
         val builder = GestureDescription.Builder().apply {
             addStroke(stroke)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && displayId > 0) {
                 setDisplayId(displayId)
             }
         }
@@ -274,7 +296,7 @@ class ControllerAccessibilityService : AccessibilityService() {
         val stroke = GestureDescription.StrokeDescription(path, 0, durationMs)
         val builder = GestureDescription.Builder().apply {
             addStroke(stroke)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && displayId != -1) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && displayId > 0) {
                 setDisplayId(displayId)
             }
         }
@@ -286,7 +308,13 @@ class ControllerAccessibilityService : AccessibilityService() {
         }
     }
 
-    fun performMediaAction(action: MediaAction, displayId: Int, displayWidth: Int, displayHeight: Int): Boolean {
+    fun performMediaAction(
+        action: MediaAction,
+        displayId: Int,
+        displayWidth: Int,
+        displayHeight: Int,
+        packageName: String = ""
+    ): Boolean {
         // Step 1: Search for media action accessibility nodes in active windows
         val matchedNode = findMediaActionNode(action)
         if (matchedNode != null) {
@@ -295,21 +323,48 @@ class ControllerAccessibilityService : AccessibilityService() {
         }
 
         // Step 2: Fallback to non-destructive gesture injection on target display
-        val targetWidth = if (displayWidth > 0) displayWidth.toFloat() else 1920f
-        val targetHeight = if (displayHeight > 0) displayHeight.toFloat() else 1080f
+        val dm = resources.displayMetrics
+        val targetWidth = if (displayWidth > 0) displayWidth.toFloat() else dm.widthPixels.toFloat()
+        val targetHeight = if (displayHeight > 0) displayHeight.toFloat() else dm.heightPixels.toFloat()
+        val targetDisplay = if (displayId > 0) displayId else Display.DEFAULT_DISPLAY
+
+        val pkgLower = packageName.lowercase()
+        val isGallery = pkgLower.contains("gallery") || pkgLower.contains("photos") || pkgLower.contains("video")
+        val isYouTube = pkgLower.contains("youtube")
 
         return when (action) {
             MediaAction.PLAY_PAUSE -> {
                 // Tapping center of display toggles playback or reveals/triggers controls in video player
-                dispatchClick(displayId, targetWidth * 0.5f, targetHeight * 0.5f)
+                dispatchClick(targetDisplay, targetWidth * 0.5f, targetHeight * 0.5f)
             }
             MediaAction.FAST_FORWARD -> {
-                // Smooth horizontal swipe rightwards scrubs video forward WITHOUT triggering zoom
-                dispatchHorizontalSwipe(displayId, targetWidth * 0.45f, targetWidth * 0.65f, targetHeight * 0.5f)
+                if (isYouTube) {
+                    // Double-tap on right half (+10s seek) inside YouTube video player
+                    dispatchDoubleClick(targetDisplay, targetWidth * 0.75f, targetHeight * 0.5f)
+                } else if (isGallery) {
+                    // Smooth horizontal swipe rightwards scrubs video forward WITHOUT triggering zoom
+                    dispatchHorizontalSwipe(targetDisplay, targetWidth * 0.40f, targetWidth * 0.75f, targetHeight * 0.5f)
+                } else {
+                    // General player: try double-tap right first, fallback to horizontal scrub
+                    val done = dispatchDoubleClick(targetDisplay, targetWidth * 0.75f, targetHeight * 0.5f)
+                    if (!done) {
+                        dispatchHorizontalSwipe(targetDisplay, targetWidth * 0.40f, targetWidth * 0.75f, targetHeight * 0.5f)
+                    } else true
+                }
             }
             MediaAction.REWIND -> {
-                // Smooth horizontal swipe leftwards scrubs video backward WITHOUT triggering zoom
-                dispatchHorizontalSwipe(displayId, targetWidth * 0.55f, targetWidth * 0.35f, targetHeight * 0.5f)
+                if (isYouTube) {
+                    // Double-tap on left half (-10s seek) inside YouTube video player
+                    dispatchDoubleClick(targetDisplay, targetWidth * 0.25f, targetHeight * 0.5f)
+                } else if (isGallery) {
+                    // Smooth horizontal swipe leftwards scrubs video backward WITHOUT triggering zoom
+                    dispatchHorizontalSwipe(targetDisplay, targetWidth * 0.60f, targetWidth * 0.25f, targetHeight * 0.5f)
+                } else {
+                    val done = dispatchDoubleClick(targetDisplay, targetWidth * 0.25f, targetHeight * 0.5f)
+                    if (!done) {
+                        dispatchHorizontalSwipe(targetDisplay, targetWidth * 0.60f, targetWidth * 0.25f, targetHeight * 0.5f)
+                    } else true
+                }
             }
         }
     }
@@ -388,14 +443,44 @@ class ControllerAccessibilityService : AccessibilityService() {
         rootInActiveWindow?.let { if (!roots.contains(it)) roots.add(it) }
 
         val searchKeywords: List<String> = when (action) {
-            MediaAction.PLAY_PAUSE -> listOf("play", "pause", "play_pause", "btn_play", "btn_pause", "exo_play", "exo_pause")
-            MediaAction.FAST_FORWARD -> listOf("forward", "fast-forward", "seek forward", "skip forward", "ffwd", "exo_ffwd")
-            MediaAction.REWIND -> listOf("rewind", "seek back", "skip back", "rew", "exo_rew")
+            MediaAction.PLAY_PAUSE -> listOf(
+                "play", "pause", "play_pause", "btn_play", "btn_pause",
+                "exo_play", "exo_pause", "play_btn", "pause_btn",
+                "video_play", "video_pause", "btn_play_pause", "iv_play_pause",
+                "action_play", "action_pause", "播放", "暂停"
+            )
+            MediaAction.FAST_FORWARD -> listOf(
+                "forward", "fast-forward", "fast forward", "seek forward",
+                "skip forward", "ffwd", "exo_ffwd", "forward 10", "10 seconds forward",
+                "快进", "前进"
+            )
+            MediaAction.REWIND -> listOf(
+                "rewind", "seek back", "skip back", "rew", "exo_rew",
+                "rewind 10", "10 seconds backward", "seek backward",
+                "快退", "后退"
+            )
         }
 
         for (root in roots) {
             val node = searchNodeByKeywords(root, searchKeywords)
             if (node != null) return node
+        }
+        return null
+    }
+
+    fun queryVideoPlayingState(): Boolean? {
+        val pauseNode = findMediaActionNode(MediaAction.PLAY_PAUSE)
+        if (pauseNode != null) {
+            val desc = pauseNode.contentDescription?.toString()?.lowercase() ?: ""
+            val text = pauseNode.text?.toString()?.lowercase() ?: ""
+            val viewId = pauseNode.viewIdResourceName?.lowercase() ?: ""
+            val combined = "$desc $text $viewId"
+            if (combined.contains("pause") || combined.contains("暂停")) {
+                return true
+            }
+            if (combined.contains("play") || combined.contains("播放")) {
+                return false
+            }
         }
         return null
     }
