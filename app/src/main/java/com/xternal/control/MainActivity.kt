@@ -20,6 +20,9 @@ import android.text.TextWatcher
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
 import android.media.AudioAttributes
+import com.xternal.control.media.MediaSessionRemoteManager
+import com.xternal.control.media.MediaSessionState
+import com.xternal.control.service.MediaNotificationListenerService
 import android.view.KeyEvent
 import android.view.HapticFeedbackConstants
 import android.view.Display
@@ -88,8 +91,12 @@ class MainActivity : AppCompatActivity() {
     private var backPressedTime = 0L
 
     // Audio & Multimedia Management
+    private lateinit var mediaRemoteManager: MediaSessionRemoteManager
     private lateinit var audioManager: AudioManager
     private var audioPlaybackCallback: AudioManager.AudioPlaybackCallback? = null
+    private var cardMediaControls: View? = null
+    private var tvPermNotification: TextView? = null
+    private var btnGrantNotification: Button? = null
     private var tvMediaTitle: TextView? = null
     private var tvMediaArtist: TextView? = null
     private var tvMediaStatusDot: View? = null
@@ -241,6 +248,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        mediaRemoteManager = MediaSessionRemoteManager.init(this)
         checkAndShowOnboardingGuide()
         checkAndShowDonationPrompt()
         setupPlaystoreReviewCard()
@@ -256,6 +264,9 @@ class MainActivity : AppCompatActivity() {
         updateProUi()
         applyPlayStoreAppRestrictions()
         sortAndRefreshAppLists()
+        if (::mediaRemoteManager.isInitialized) {
+            mediaRemoteManager.refreshActiveSessions()
+        }
         if (::audioManager.isInitialized) {
             checkCurrentMediaPlayback()
         }
@@ -268,6 +279,12 @@ class MainActivity : AppCompatActivity() {
         btnGrantOverlay = findViewById(R.id.btnGrantOverlay)
         tvPermAccessibility = findViewById(R.id.tvPermAccessibility)
         btnGrantAccessibility = findViewById(R.id.btnGrantAccessibility)
+        tvPermNotification = findViewById(R.id.tvPermNotification)
+        btnGrantNotification = findViewById(R.id.btnGrantNotification)
+        btnGrantNotification?.setOnClickListener {
+            openNotificationAccessSettings()
+        }
+        cardMediaControls = findViewById(R.id.cardMediaControls)
         rvAppsHorizontal = findViewById(R.id.rvAppsHorizontal)
         cvTrackpad = findViewById(R.id.cvTrackpad)
         cvZoomSlider = findViewById(R.id.cvZoomSlider)
@@ -595,6 +612,35 @@ class MainActivity : AppCompatActivity() {
             tvPermAccessibility.text = "Accessibility: Inactive"
             tvPermAccessibility.setTextColor(ContextCompat.getColor(this, R.color.neon_warning))
             btnGrantAccessibility.visibility = View.VISIBLE
+        }
+
+        val isNotificationAccessGranted = MediaNotificationListenerService.isAccessGranted(this)
+        if (isNotificationAccessGranted) {
+            tvPermNotification?.text = "Media Remote: Active"
+            tvPermNotification?.setTextColor(ContextCompat.getColor(this, R.color.neon_emerald))
+            btnGrantNotification?.visibility = View.GONE
+            if (::mediaRemoteManager.isInitialized) {
+                mediaRemoteManager.setupSessionListenerIfAuthorized()
+            }
+        } else {
+            tvPermNotification?.text = "Media Remote: Disabled"
+            tvPermNotification?.setTextColor(ContextCompat.getColor(this, R.color.neon_warning))
+            btnGrantNotification?.visibility = View.VISIBLE
+        }
+    }
+
+    private fun openNotificationAccessSettings() {
+        try {
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, MediaNotificationListenerService.getComponentName(this@MainActivity).flattenToString())
+                }
+            } else {
+                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
     }
 
@@ -1187,37 +1233,48 @@ class MainActivity : AppCompatActivity() {
         val btnMediaRewind = findViewById<View>(R.id.btnMediaRewind)
         btnMediaRewind?.setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
-            val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
-            val service = ControllerAccessibilityService.instance
-
-            if (service != null && (isLocalVideoForeground() || isYouTubeForeground())) {
-                service.performMediaAction(
-                    ControllerAccessibilityService.MediaAction.REWIND,
-                    targetDisplayId,
-                    targetW,
-                    targetH,
-                    activeMediaPackage
-                )
+            val currentState = mediaRemoteManager.getCurrentState()
+            if (currentState.hasActiveSession) {
+                mediaRemoteManager.seekRelative(-10_000)
+                Toast.makeText(this, "⏪ Rewind (-10s)", Toast.LENGTH_SHORT).show()
             } else {
-                sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD)
+                val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
+                val service = ControllerAccessibilityService.instance
+
+                if (service != null && (isLocalVideoForeground() || isYouTubeForeground())) {
+                    service.performMediaAction(
+                        ControllerAccessibilityService.MediaAction.REWIND,
+                        targetDisplayId,
+                        targetW,
+                        targetH,
+                        activeMediaPackage
+                    )
+                } else {
+                    sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD)
+                }
+                Toast.makeText(this, "⏪ Rewind (-10s)", Toast.LENGTH_SHORT).show()
             }
-            Toast.makeText(this, "⏪ Rewind (-10s)", Toast.LENGTH_SHORT).show()
         }
         btnMediaRewind?.setOnLongClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
-            sendMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+            val currentState = mediaRemoteManager.getCurrentState()
+            if (currentState.hasActiveSession) {
+                mediaRemoteManager.skipToPrevious()
+            } else {
+                sendMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+            }
             Toast.makeText(this, "⏮️ Previous Track/Video", Toast.LENGTH_SHORT).show()
             true
         }
 
         btnMediaPlayPause?.setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
-            val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
-            val service = ControllerAccessibilityService.instance
-
-            if (isLocalVideoForeground()) {
-                // ONLY control the foreground local video (e.g. Samsung/Xiaomi Gallery)
-                // Do NOT send global media key that would wake up minimized YouTube in the background!
+            val currentState = mediaRemoteManager.getCurrentState()
+            if (currentState.hasActiveSession) {
+                mediaRemoteManager.togglePlayPause()
+            } else if (isLocalVideoForeground()) {
+                val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
+                val service = ControllerAccessibilityService.instance
                 service?.performMediaAction(
                     ControllerAccessibilityService.MediaAction.PLAY_PAUSE,
                     targetDisplayId,
@@ -1226,7 +1283,6 @@ class MainActivity : AppCompatActivity() {
                     activeMediaPackage
                 )
             } else {
-                // Foreground is YouTube/Spotify/SBS or background media: dispatch standard media key
                 sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
             }
             v.postDelayed({ checkCurrentMediaPlayback() }, 300)
@@ -1236,25 +1292,36 @@ class MainActivity : AppCompatActivity() {
         val btnMediaForward = findViewById<View>(R.id.btnMediaForward)
         btnMediaForward?.setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
-            val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
-            val service = ControllerAccessibilityService.instance
-
-            if (service != null && (isLocalVideoForeground() || isYouTubeForeground())) {
-                service.performMediaAction(
-                    ControllerAccessibilityService.MediaAction.FAST_FORWARD,
-                    targetDisplayId,
-                    targetW,
-                    targetH,
-                    activeMediaPackage
-                )
+            val currentState = mediaRemoteManager.getCurrentState()
+            if (currentState.hasActiveSession) {
+                mediaRemoteManager.seekRelative(10_000)
+                Toast.makeText(this, "⏩ Forward (+10s)", Toast.LENGTH_SHORT).show()
             } else {
-                sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD)
+                val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
+                val service = ControllerAccessibilityService.instance
+
+                if (service != null && (isLocalVideoForeground() || isYouTubeForeground())) {
+                    service.performMediaAction(
+                        ControllerAccessibilityService.MediaAction.FAST_FORWARD,
+                        targetDisplayId,
+                        targetW,
+                        targetH,
+                        activeMediaPackage
+                    )
+                } else {
+                    sendMediaKey(KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD)
+                }
+                Toast.makeText(this, "⏩ Forward (+10s)", Toast.LENGTH_SHORT).show()
             }
-            Toast.makeText(this, "⏩ Forward (+10s)", Toast.LENGTH_SHORT).show()
         }
         btnMediaForward?.setOnLongClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
-            sendMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
+            val currentState = mediaRemoteManager.getCurrentState()
+            if (currentState.hasActiveSession) {
+                mediaRemoteManager.skipToNext()
+            } else {
+                sendMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
+            }
             Toast.makeText(this, "⏭️ Next Track/Video", Toast.LENGTH_SHORT).show()
             true
         }
@@ -1268,10 +1335,41 @@ class MainActivity : AppCompatActivity() {
                 e.printStackTrace()
             }
         }
+
+        pbMediaProgress?.setOnTouchListener { view, event ->
+            val currentState = mediaRemoteManager.getCurrentState()
+            if (currentState.hasActiveSession && currentState.durationMs > 0) {
+                if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_MOVE) {
+                    val width = view.width
+                    if (width > 0) {
+                        val touchX = event.x.coerceIn(0f, width.toFloat())
+                        val ratio = touchX / width.toFloat()
+                        val targetMs = (ratio * currentState.durationMs).toLong()
+                        pbMediaProgress?.progress = (ratio * 100).toInt()
+                        tvMediaTimeElapsed?.text = formatDurationMs(targetMs)
+                        if (event.action == MotionEvent.ACTION_UP) {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
+                            mediaRemoteManager.seekTo(targetMs)
+                        }
+                    }
+                    return@setOnTouchListener true
+                }
+            }
+            false
+        }
     }
 
     private fun setupMediaDetection() {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        if (::mediaRemoteManager.isInitialized) {
+            mediaRemoteManager.onStateChangedListener = { state ->
+                runOnUiThread {
+                    applyMediaSessionState(state)
+                }
+            }
+        }
+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             audioPlaybackCallback = object : AudioManager.AudioPlaybackCallback() {
                 override fun onPlaybackConfigChanged(configs: List<AudioPlaybackConfiguration>) {
@@ -1292,13 +1390,20 @@ class MainActivity : AppCompatActivity() {
     private fun updateMediaAppInfo(pkg: String) {
         if (pkg.isEmpty() || pkg == packageName) return
         activeMediaPackage = pkg
+        if (::mediaRemoteManager.isInitialized) {
+            mediaRemoteManager.foregroundPackage = pkg
+        }
         try {
             val isSystemOrLauncher = pkg.contains("launcher") || pkg.contains("home") || pkg.contains("systemui") || pkg.contains("settings")
             if (isSystemOrLauncher) {
                 runOnUiThread {
                     if (!isAudioActivelyPlaying()) {
-                        tvMediaTitle?.text = "Media Controller"
-                        tvMediaArtist?.text = "Ready for playback"
+                        val state = if (::mediaRemoteManager.isInitialized) mediaRemoteManager.getCurrentState() else null
+                        if (state != null && state.hasActiveSession) {
+                            applyMediaSessionState(state)
+                        } else {
+                            cardMediaControls?.visibility = View.GONE
+                        }
                     }
                 }
                 return
@@ -1307,12 +1412,94 @@ class MainActivity : AppCompatActivity() {
             val appInfo = pm.getApplicationInfo(pkg, 0)
             val label = pm.getApplicationLabel(appInfo).toString()
             runOnUiThread {
-                tvMediaTitle?.text = label
+                val state = if (::mediaRemoteManager.isInitialized) mediaRemoteManager.getCurrentState() else null
+                if (state == null || !state.hasActiveSession) {
+                    tvMediaTitle?.text = label
+                }
             }
         } catch (e: Exception) {
             runOnUiThread {
-                tvMediaTitle?.text = "Media Controller"
+                val state = if (::mediaRemoteManager.isInitialized) mediaRemoteManager.getCurrentState() else null
+                if (state == null || !state.hasActiveSession) {
+                    tvMediaTitle?.text = "Media Controller"
+                }
             }
+        }
+    }
+
+    private fun applyMediaSessionState(state: MediaSessionState) {
+        if (!state.hasActiveSession) {
+            if (isLocalVideoForeground()) {
+                cardMediaControls?.visibility = View.VISIBLE
+                val appLabel = try {
+                    val pm = packageManager
+                    val appInfo = pm.getApplicationInfo(activeMediaPackage, 0)
+                    pm.getApplicationLabel(appInfo).toString()
+                } catch (e: Exception) {
+                    "Video Player"
+                }
+                tvMediaTitle?.text = appLabel
+                tvMediaArtist?.text = if (externalDisplayId != -1) "Playing on Glasses / Display" else "Local Video"
+                updateMediaTimelineFromPlayer()
+            } else {
+                cardMediaControls?.visibility = View.GONE
+                mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
+            }
+            return
+        }
+
+        // Active MediaSession -> Reveal widget (Option 1)
+        cardMediaControls?.visibility = View.VISIBLE
+
+        tvMediaTitle?.text = if (state.title.isNotBlank()) state.title else state.appName
+        tvMediaArtist?.text = when {
+            state.artist.isNotBlank() -> state.artist
+            externalDisplayId != -1 -> "Playing on Glasses / Display"
+            state.appName.isNotBlank() -> state.appName
+            else -> "Ready for playback"
+        }
+
+        if (state.isPlaying) {
+            tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
+            tvMediaStatusLabel?.text = "PLAYING"
+            tvMediaStatusLabel?.setTextColor(ContextCompat.getColor(this, R.color.neon_emerald))
+            btnMediaPlayPause?.setImageResource(R.drawable.ic_media_pause)
+        } else {
+            tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.text_secondary)
+            tvMediaStatusLabel?.text = "PAUSED"
+            tvMediaStatusLabel?.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            btnMediaPlayPause?.setImageResource(R.drawable.ic_media_play)
+        }
+
+        if (state.durationMs > 0) {
+            layoutMediaTimeline?.visibility = View.VISIBLE
+            tvMediaTimeElapsed?.text = formatDurationMs(state.currentPositionMs)
+            tvMediaTimeTotal?.text = formatDurationMs(state.durationMs)
+            val percent = ((state.currentPositionMs.toDouble() / state.durationMs.toDouble()) * 100).toInt().coerceIn(0, 100)
+            pbMediaProgress?.progress = percent
+        } else {
+            val timeline = ControllerAccessibilityService.instance?.queryActiveMediaTimeline()
+            if (timeline != null) {
+                layoutMediaTimeline?.visibility = View.VISIBLE
+                tvMediaTimeElapsed?.text = timeline.currentTime
+                tvMediaTimeTotal?.text = timeline.totalTime
+                pbMediaProgress?.progress = timeline.progressPercent
+            } else {
+                layoutMediaTimeline?.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun formatDurationMs(ms: Long): String {
+        if (ms <= 0L) return "0:00"
+        val totalSecs = ms / 1000
+        val seconds = totalSecs % 60
+        val minutes = (totalSecs / 60) % 60
+        val hours = totalSecs / 3600
+        return if (hours > 0) {
+            String.format("%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format("%d:%02d", minutes, seconds)
         }
     }
 
@@ -1388,12 +1575,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkCurrentMediaPlayback() {
+        if (::mediaRemoteManager.isInitialized) {
+            mediaRemoteManager.refreshActiveSessions()
+            val state = mediaRemoteManager.getCurrentState()
+            if (state.hasActiveSession) {
+                applyMediaSessionState(state)
+                return
+            }
+        }
         val active = isAudioActivelyPlaying()
         updateMediaPlaybackUi(active)
     }
 
     private fun updateMediaPlaybackUi(isPlaying: Boolean) {
         if (isPlaying) {
+            cardMediaControls?.visibility = View.VISIBLE
             tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
             tvMediaStatusLabel?.text = "PLAYING"
             tvMediaStatusLabel?.setTextColor(ContextCompat.getColor(this, R.color.neon_emerald))
@@ -1408,15 +1604,16 @@ class MainActivity : AppCompatActivity() {
             mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
             mediaProgressHandler.post(mediaProgressRunnable)
         } else {
-            tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.text_secondary)
-            tvMediaStatusLabel?.text = "IDLE"
-            tvMediaStatusLabel?.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-            
-            // Unified styling: identical vector icon, background, and tint
-            btnMediaPlayPause?.setImageResource(R.drawable.ic_media_play)
-
-            tvMediaArtist?.text = "Ready for playback"
-            layoutMediaTimeline?.visibility = View.GONE
+            if (isLocalVideoForeground()) {
+                cardMediaControls?.visibility = View.VISIBLE
+                tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.text_secondary)
+                tvMediaStatusLabel?.text = "PAUSED"
+                tvMediaStatusLabel?.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+                btnMediaPlayPause?.setImageResource(R.drawable.ic_media_play)
+                layoutMediaTimeline?.visibility = View.GONE
+            } else {
+                cardMediaControls?.visibility = View.GONE
+            }
             mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
         }
     }

@@ -218,6 +218,36 @@
                                 android:paddingVertical="0dp"
                                 app:cornerRadius="6dp" />
                         </LinearLayout>
+
+                        <!-- Media Remote (Notification Access) Row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="10dp">
+
+                            <TextView
+                                android:id="@+id/tvPermNotification"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Media Remote: Disabled"
+                                android:textColor="@color/neon_warning"
+                                android:textSize="12sp" />
+
+                            <Button
+                                android:id="@+id/btnGrantNotification"
+                                android:layout_width="wrap_content"
+                                android:layout_height="32dp"
+                                android:backgroundTint="@color/glass_white_fill_active"
+                                android:text="ENABLE"
+                                android:textColor="@color/text_primary"
+                                android:textSize="10sp"
+                                android:paddingHorizontal="12dp"
+                                android:paddingVertical="0dp"
+                                app:cornerRadius="6dp" />
+                        </LinearLayout>
                     </LinearLayout>
                 </androidx.cardview.widget.CardView>
 
@@ -706,12 +736,13 @@
                 </FrameLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- Music Player Widget -->
+            <!-- Music Player Widget (Auto-hides when no media is active) -->
             <androidx.cardview.widget.CardView
                 android:id="@+id/cardMediaControls"
                 android:layout_width="match_parent"
-                android:layout_height="110dp"
+                android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
+                android:visibility="gone"
                 app:cardCornerRadius="16dp"
                 app:cardBackgroundColor="@color/bg_panel"
                 app:cardElevation="2dp">
