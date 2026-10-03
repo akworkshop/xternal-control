@@ -245,7 +245,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_marginTop="2dp"
-                                    android:text="Required for universal ±10s seeking (Android labels this as Notification Access, no personal messages are read)"
+                                    android:text="Required for ±10s seeking and playback sync (Conversations, chats and silent options can be unticked/off)"
                                     android:textColor="@color/text_secondary"
                                     android:textSize="10sp" />
                             </LinearLayout>

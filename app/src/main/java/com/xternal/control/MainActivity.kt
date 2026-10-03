@@ -526,13 +526,14 @@ class MainActivity : AppCompatActivity() {
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle("Media Remote Permission")
             .setMessage(
-                "To control playback, sync song titles, and seek ±10s in media apps (YouTube, Spotify, SBS, etc.), Android requires 'Notification Access'.\n\n" +
+                "To control playback, sync track titles, and seek ±10s in media apps (YouTube, Spotify, SBS, etc.), Android requires 'Notification Access'.\n\n" +
                 "Why Android requires this:\n" +
-                "• Android's MediaSession architecture requires NotificationListenerService authorization to query active media sessions.\n" +
-                "• It allows Xternal Control to detect playing media, show live progress, and send universal seek commands.\n\n" +
-                "Privacy Guarantee:\n" +
-                "• Xternal Control DOES NOT read, store, or reply to your personal notifications or messages.\n" +
-                "• It is used strictly to communicate with media playback sessions."
+                "• Android's MediaSession architecture requires NotificationListenerService authorization to communicate with media players.\n" +
+                "• It allows Xternal Control to detect active playback, display live progress, and send universal seek commands.\n\n" +
+                "Privacy & Setup Tip:\n" +
+                "• You DO NOT need to enable Conversations, Real-time chats, or Silent alerts!\n" +
+                "• You can safely leave 'Conversations', 'Alerting', and 'Silent' UNTICKED or OFF in system settings. Only the main Notification Access switch is needed.\n" +
+                "• Xternal Control never reads, saves, or replies to personal messages or chats."
             )
             .setPositiveButton("Open Settings") { _, _ ->
                 openNotificationAccessSettings()
