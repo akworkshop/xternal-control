@@ -474,6 +474,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnMainHome).setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             isDesktopActive = true
+            activeMediaPackage = packageName
+            cardMediaControls?.visibility = View.GONE
+            mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
             updatePipButtonUi(false)
             InteractionBridge.sendPipMode(false)
             InteractionBridge.sendHomeRequest()
@@ -1237,6 +1240,39 @@ class MainActivity : AppCompatActivity() {
         return pkg.contains("youtube")
     }
 
+    private fun isVideoAppPackage(pkg: String): Boolean {
+        val lower = pkg.lowercase()
+        return (lower.contains("youtube") && !lower.contains("music")) ||
+                lower.contains("netflix") ||
+                lower.contains("disney") ||
+                lower.contains("amazon.avod") ||
+                lower.contains("amazon.video") ||
+                lower.contains("appletv") ||
+                lower.contains("hbo") ||
+                lower.contains("max") ||
+                lower.contains("hulu") ||
+                lower.contains("paramount") ||
+                lower.contains("peacock") ||
+                lower.contains("tubi") ||
+                lower.contains("twitch") ||
+                lower.contains("vlc") ||
+                lower.contains("mxtech.videoplayer") ||
+                lower.contains("gallery") ||
+                lower.contains("video") ||
+                lower.contains("photos") ||
+                lower.contains("movie") ||
+                lower.contains("cinema")
+    }
+
+    private fun isMediaAppOnScreen(mediaPkg: String): Boolean {
+        if (mediaPkg.isBlank()) return false
+        if (isDesktopActive) return false
+        val active = activeMediaPackage.lowercase()
+        val target = mediaPkg.lowercase()
+        val last = (lastLaunchedExternalPackage ?: "").lowercase()
+        return active == target || last == target || active.contains(target) || target.contains(active)
+    }
+
     private fun setupMediaControls() {
         tvMediaTitle = findViewById(R.id.tvMediaTitle)
         tvMediaArtist = findViewById(R.id.tvMediaArtist)
@@ -1402,7 +1438,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateMediaAppInfo(pkg: String) {
-        if (pkg.isEmpty() || pkg == packageName) return
+        if (pkg.isEmpty() || pkg == packageName) {
+            if (pkg == packageName) {
+                isDesktopActive = true
+                activeMediaPackage = pkg
+                runOnUiThread {
+                    checkCurrentMediaPlayback()
+                }
+            }
+            return
+        }
         activeMediaPackage = pkg
         if (::mediaRemoteManager.isInitialized) {
             mediaRemoteManager.foregroundPackage = pkg
@@ -1410,15 +1455,9 @@ class MainActivity : AppCompatActivity() {
         try {
             val isSystemOrLauncher = pkg.contains("launcher") || pkg.contains("home") || pkg.contains("systemui") || pkg.contains("settings")
             if (isSystemOrLauncher) {
+                isDesktopActive = true
                 runOnUiThread {
-                    if (!isAudioActivelyPlaying()) {
-                        val state = if (::mediaRemoteManager.isInitialized) mediaRemoteManager.getCurrentState() else null
-                        if (state != null && state.hasActiveSession) {
-                            applyMediaSessionState(state)
-                        } else {
-                            cardMediaControls?.visibility = View.GONE
-                        }
-                    }
+                    checkCurrentMediaPlayback()
                 }
                 return
             }
@@ -1430,6 +1469,7 @@ class MainActivity : AppCompatActivity() {
                 if (state == null || !state.hasActiveSession) {
                     tvMediaTitle?.text = label
                 }
+                checkCurrentMediaPlayback()
             }
         } catch (e: Exception) {
             runOnUiThread {
@@ -1437,13 +1477,14 @@ class MainActivity : AppCompatActivity() {
                 if (state == null || !state.hasActiveSession) {
                     tvMediaTitle?.text = "Media Controller"
                 }
+                checkCurrentMediaPlayback()
             }
         }
     }
 
     private fun applyMediaSessionState(state: MediaSessionState) {
         if (!state.hasActiveSession) {
-            if (isLocalVideoForeground()) {
+            if (isLocalVideoForeground() && !isDesktopActive) {
                 cardMediaControls?.visibility = View.VISIBLE
                 val appLabel = try {
                     val pm = packageManager
@@ -1462,7 +1503,27 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Active MediaSession -> Reveal widget (Option 1)
+        val isVideoApp = isVideoAppPackage(state.packageName)
+        val isOnScreen = isMediaAppOnScreen(state.packageName)
+
+        // Strict Screen-Aware Rule for Video Apps vs Audio Apps (v1.3.1):
+        // 1. Video apps (YouTube, Netflix, Prime Video, Disney+, Apple TV, Gallery, etc.):
+        //    ONLY show when the app is actively on screen! When off-screen, hide immediately to prevent ghost playback confusion.
+        // 2. Audio/Music apps (Spotify, Music, Podcasts): Show when actively on screen, OR when actively playing audio in background.
+        //    If paused and off-screen, auto-hide immediately to maximize trackpad space.
+        val shouldShowControls = if (isVideoApp) {
+            isOnScreen
+        } else {
+            isOnScreen || state.isPlaying
+        }
+
+        if (!shouldShowControls) {
+            cardMediaControls?.visibility = View.GONE
+            mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
+            return
+        }
+
+        // Active session and qualified -> Reveal widget
         cardMediaControls?.visibility = View.VISIBLE
 
         tvMediaTitle?.text = if (state.title.isNotBlank()) state.title else state.appName
@@ -1603,6 +1664,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateMediaPlaybackUi(isPlaying: Boolean) {
         if (isPlaying) {
+            val state = if (::mediaRemoteManager.isInitialized) mediaRemoteManager.getCurrentState() else null
+            if (state != null && state.hasActiveSession) {
+                applyMediaSessionState(state)
+                return
+            }
+
+            // Video app off-screen guard:
+            if (isDesktopActive || (isVideoAppPackage(activeMediaPackage) && !isMediaAppOnScreen(activeMediaPackage))) {
+                cardMediaControls?.visibility = View.GONE
+                mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
+                return
+            }
+
             cardMediaControls?.visibility = View.VISIBLE
             tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
             tvMediaStatusLabel?.text = "PLAYING"
@@ -1618,7 +1692,7 @@ class MainActivity : AppCompatActivity() {
             mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
             mediaProgressHandler.post(mediaProgressRunnable)
         } else {
-            if (isLocalVideoForeground()) {
+            if (isLocalVideoForeground() && !isDesktopActive) {
                 cardMediaControls?.visibility = View.VISIBLE
                 tvMediaStatusDot?.backgroundTintList = ContextCompat.getColorStateList(this, R.color.text_secondary)
                 tvMediaStatusLabel?.text = "PAUSED"
