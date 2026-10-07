@@ -167,23 +167,31 @@ class MediaSessionRemoteManager private constructor(private val context: Context
             return
         }
 
-        // Priority 1: A controller matching the active foreground package on screen
+        // Priority 1: A controller matching the active foreground package on screen AND actively playing
+        val foregroundPlayingController = if (foregroundPackage.isNotEmpty()) {
+            controllers.firstOrNull {
+                isPackageMatch(it.packageName ?: "", foregroundPackage) &&
+                it.playbackState?.state == PlaybackState.STATE_PLAYING
+            }
+        } else null
+
+        // Priority 2: Any controller matching the active foreground package on screen
         val foregroundController = if (foregroundPackage.isNotEmpty()) {
             controllers.firstOrNull { isPackageMatch(it.packageName ?: "", foregroundPackage) }
         } else null
 
-        // Priority 2: A controller currently actively playing
+        // Priority 3: A controller currently actively playing
         val playingController = controllers.firstOrNull {
             it.playbackState?.state == PlaybackState.STATE_PLAYING
         }
 
-        // Priority 3: Keep existing controller if still in list
+        // Priority 4: Keep existing controller if still in list
         val currentController = if (activeController != null && controllers.any { it.sessionToken == activeController?.sessionToken }) {
             activeController
         } else null
 
-        // Priority 4: First available controller
-        val selected = foregroundController ?: playingController ?: currentController ?: controllers.first()
+        // Priority 5: First available controller
+        val selected = foregroundPlayingController ?: foregroundController ?: playingController ?: currentController ?: controllers.first()
 
         if (selected.sessionToken != activeController?.sessionToken) {
             activeController?.unregisterCallback(controllerCallback)

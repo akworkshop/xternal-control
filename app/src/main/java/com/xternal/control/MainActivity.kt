@@ -482,6 +482,9 @@ class MainActivity : AppCompatActivity() {
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             isDesktopActive = true
             activeMediaPackage = packageName
+            if (::mediaRemoteManager.isInitialized) {
+                mediaRemoteManager.foregroundPackage = ""
+            }
             lastKnownDurationMs = 0L
             lastKnownDurationTitle = ""
             cardMediaControls?.visibility = View.GONE
@@ -911,6 +914,8 @@ class MainActivity : AppCompatActivity() {
         }
         isDesktopActive = false
         lastLaunchedExternalPackage = packageName
+        activeMediaPackage = packageName
+        updateMediaAppInfo(packageName)
         hideOverlayCursor()
         // Track recents: move to start
         recentPackages.remove(packageName)
@@ -921,6 +926,9 @@ class MainActivity : AppCompatActivity() {
 
         // Always route launch event to the glasses activity interface
         InteractionBridge.sendAppLaunch(packageName)
+        checkCurrentMediaPlayback()
+        window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 300)
+        window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 600)
 
         // If physical external display is connected, also launch the real package on it
         if (externalDisplayId != -1) {
@@ -2171,12 +2179,17 @@ class MainActivity : AppCompatActivity() {
                 if (pkg != packageName) {
                     isDesktopActive = false
                     lastLaunchedExternalPackage = pkg
+                    activeMediaPackage = pkg
+                    updateMediaAppInfo(pkg)
                     recentPackages.remove(pkg)
                     recentPackages.add(0, pkg)
                     saveListsToPreferences()
                     if (::appAdapter.isInitialized) {
                         sortAndRefreshAppLists()
                     }
+                    checkCurrentMediaPlayback()
+                    window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 300)
+                    window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 600)
                 }
             } catch (e: Throwable) {
                 e.printStackTrace()
@@ -2208,6 +2221,14 @@ class MainActivity : AppCompatActivity() {
         InteractionBridge.desktopForegroundStateListener = { isForeground ->
             try {
                 isDesktopActive = isForeground
+                if (isForeground) {
+                    activeMediaPackage = packageName
+                    if (::mediaRemoteManager.isInitialized) {
+                        mediaRemoteManager.foregroundPackage = ""
+                    }
+                    cardMediaControls?.visibility = View.GONE
+                    mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
+                }
             } catch (e: Throwable) {
                 e.printStackTrace()
             }
@@ -2276,7 +2297,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        if (!appLaunched) {
+        if (appLaunched) {
+            activeMediaPackage = targetPackage
+            lastLaunchedExternalPackage = targetPackage
+            updateMediaAppInfo(targetPackage)
+            checkCurrentMediaPlayback()
+            window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 300)
+            window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 600)
+        } else {
             Toast.makeText(this, "App could not be restored", Toast.LENGTH_SHORT).show()
         }
     }
