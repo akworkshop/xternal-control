@@ -36,6 +36,8 @@ class ControllerAccessibilityService : AccessibilityService() {
         if (event == null) return
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val pkg = event.packageName?.toString() ?: return
+            // Ignore self package so phone trackpad/UI events never overwrite external display foreground state
+            if (pkg == packageName) return
             InteractionBridge.sendForegroundPackageChanged(pkg)
         }
     }
