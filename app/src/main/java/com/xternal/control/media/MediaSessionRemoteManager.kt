@@ -2,6 +2,7 @@ package com.xternal.control.media
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
@@ -10,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.service.notification.StatusBarNotification
+import android.view.KeyEvent
 import com.xternal.control.service.MediaNotificationListenerService
 
 data class MediaSessionState(
@@ -40,6 +42,7 @@ class MediaSessionRemoteManager private constructor(private val context: Context
     }
 
     private val mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var activeController: MediaController? = null
@@ -312,29 +315,105 @@ class MediaSessionRemoteManager private constructor(private val context: Context
         onStateChangedListener?.invoke(state)
     }
 
-    // --- Media Controls ---
+    // --- Media Controls & Dual-Dispatch ---
+
+    private fun isMediaKeyPreferredApp(packageName: String): Boolean {
+        val pkg = packageName.lowercase()
+        return pkg.contains("amazon") ||
+                pkg.contains("avod") ||
+                pkg.contains("apple") ||
+                pkg.contains("atve")
+    }
+
+    private fun sendMediaKeyEvent(controller: MediaController?, keyCode: Int): Boolean {
+        val now = SystemClock.uptimeMillis()
+        val down = KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0)
+        val up = KeyEvent(now, now + 10, KeyEvent.ACTION_UP, keyCode, 0)
+        var handled = false
+
+        if (controller != null) {
+            try {
+                val d1 = controller.dispatchMediaButtonEvent(down)
+                val d2 = controller.dispatchMediaButtonEvent(up)
+                handled = d1 || d2
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        try {
+            audioManager?.dispatchMediaKeyEvent(down)
+            audioManager?.dispatchMediaKeyEvent(up)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        return handled
+    }
 
     fun togglePlayPause(): Boolean {
-        val controller = activeController ?: return false
+        val controller = activeController ?: return sendMediaKeyEvent(null, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
         val state = controller.playbackState?.state
-        return if (state == PlaybackState.STATE_PLAYING) {
-            controller.transportControls.pause()
-            true
+        val isPlaying = state == PlaybackState.STATE_PLAYING
+        val pkg = controller.packageName ?: ""
+        val actions = controller.playbackState?.actions ?: 0L
+
+        // Known apps that ignore transportControls or only declare ACTION_PLAY_PAUSE
+        val isKeyPreferred = isMediaKeyPreferredApp(pkg) ||
+                (actions != 0L && (actions and (PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE)) == 0L)
+
+        if (isKeyPreferred) {
+            // Priority 1: Direct media button event for Amazon Prime Video / Apple TV
+            sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            // Priority 2: Supplementary transportControls attempt
+            try {
+                if (isPlaying) {
+                    controller.transportControls.pause()
+                } else {
+                    controller.transportControls.play()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         } else {
-            controller.transportControls.play()
-            true
+            // Standard media apps (Netflix, Disney+, YouTube, Spotify)
+            try {
+                if (isPlaying) {
+                    controller.transportControls.pause()
+                    // Idempotent pause fallback
+                    sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PAUSE)
+                } else {
+                    controller.transportControls.play()
+                    // Idempotent play fallback
+                    sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PLAY)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            }
         }
+        return true
     }
 
     fun play(): Boolean {
-        val controller = activeController ?: return false
-        controller.transportControls.play()
+        val controller = activeController ?: return sendMediaKeyEvent(null, KeyEvent.KEYCODE_MEDIA_PLAY)
+        try {
+            controller.transportControls.play()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PLAY)
         return true
     }
 
     fun pause(): Boolean {
-        val controller = activeController ?: return false
-        controller.transportControls.pause()
+        val controller = activeController ?: return sendMediaKeyEvent(null, KeyEvent.KEYCODE_MEDIA_PAUSE)
+        try {
+            controller.transportControls.pause()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PAUSE)
         return true
     }
 
@@ -350,7 +429,26 @@ class MediaSessionRemoteManager private constructor(private val context: Context
             targetPos = targetPos.coerceAtLeast(0L)
         }
 
-        controller.transportControls.seekTo(targetPos)
+        try {
+            controller.transportControls.seekTo(targetPos)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        val pkg = controller.packageName ?: ""
+        val actions = controller.playbackState?.actions ?: 0L
+        val canSeek = (actions and PlaybackState.ACTION_SEEK_TO) != 0L
+
+        // If app relies on media keys (Amazon/Apple) or does not advertise ACTION_SEEK_TO, fallback to seek key events
+        if (isMediaKeyPreferredApp(pkg) || !canSeek) {
+            val keyCode = if (deltaMs > 0) {
+                KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+            } else {
+                KeyEvent.KEYCODE_MEDIA_REWIND
+            }
+            sendMediaKeyEvent(controller, keyCode)
+        }
+
         notifyStateChanged()
         return true
     }
@@ -359,20 +457,34 @@ class MediaSessionRemoteManager private constructor(private val context: Context
         val controller = activeController ?: return false
         val duration = controller.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: -1L
         val clamped = if (duration > 0) positionMs.coerceIn(0L, duration) else positionMs.coerceAtLeast(0L)
-        controller.transportControls.seekTo(clamped)
+        try {
+            controller.transportControls.seekTo(clamped)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         notifyStateChanged()
         return true
     }
 
     fun skipToNext(): Boolean {
-        val controller = activeController ?: return false
-        controller.transportControls.skipToNext()
+        val controller = activeController ?: return sendMediaKeyEvent(null, KeyEvent.KEYCODE_MEDIA_NEXT)
+        try {
+            controller.transportControls.skipToNext()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_NEXT)
         return true
     }
 
     fun skipToPrevious(): Boolean {
-        val controller = activeController ?: return false
-        controller.transportControls.skipToPrevious()
+        val controller = activeController ?: return sendMediaKeyEvent(null, KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+        try {
+            controller.transportControls.skipToPrevious()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PREVIOUS)
         return true
     }
 }

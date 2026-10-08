@@ -1297,6 +1297,7 @@ class MainActivity : AppCompatActivity() {
                 lower.contains("amazon.avod") ||
                 lower.contains("amazon.video") ||
                 lower.contains("appletv") ||
+                (lower.contains("apple") && (lower.contains("tv") || lower.contains("video"))) ||
                 lower.contains("hbo") ||
                 lower.contains("max") ||
                 lower.contains("hulu") ||
@@ -1343,7 +1344,8 @@ class MainActivity : AppCompatActivity() {
                 val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
                 val service = ControllerAccessibilityService.instance
 
-                if (service != null && (isLocalVideoForeground() || isYouTubeForeground())) {
+                val isVideoForeground = isLocalVideoForeground() || isYouTubeForeground() || isVideoAppPackage(activeMediaPackage)
+                if (service != null && isVideoForeground) {
                     service.performMediaAction(
                         ControllerAccessibilityService.MediaAction.REWIND,
                         targetDisplayId,
@@ -1371,9 +1373,10 @@ class MainActivity : AppCompatActivity() {
         btnMediaPlayPause?.setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             val currentState = mediaRemoteManager.getCurrentState()
+            val isVideoForeground = isLocalVideoForeground() || isYouTubeForeground() || isVideoAppPackage(activeMediaPackage)
             if (currentState.hasActiveSession) {
                 mediaRemoteManager.togglePlayPause()
-            } else if (isLocalVideoForeground()) {
+            } else if (isVideoForeground) {
                 val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
                 val service = ControllerAccessibilityService.instance
                 service?.performMediaAction(
@@ -1399,8 +1402,9 @@ class MainActivity : AppCompatActivity() {
             } else {
                 val (targetDisplayId, targetW, targetH) = getMediaTargetDisplayInfo()
                 val service = ControllerAccessibilityService.instance
+                val isVideoForeground = isLocalVideoForeground() || isYouTubeForeground() || isVideoAppPackage(activeMediaPackage)
 
-                if (service != null && (isLocalVideoForeground() || isYouTubeForeground())) {
+                if (service != null && isVideoForeground) {
                     service.performMediaAction(
                         ControllerAccessibilityService.MediaAction.FAST_FORWARD,
                         targetDisplayId,
