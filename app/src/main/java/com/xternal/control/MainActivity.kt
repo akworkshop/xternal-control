@@ -1,5 +1,6 @@
 package com.xternal.control
 
+import android.util.Log
 import android.app.ActivityOptions
 import android.content.Context
 import android.content.Intent
@@ -714,13 +715,40 @@ class MainActivity : AppCompatActivity() {
         sortAndRefreshAppLists()
     }
 
-    private fun checkExternalDisplays() {
-        val displays = displayManager.displays
-        val externalDisplays = displays.filter { it.displayId != Display.DEFAULT_DISPLAY }
+    private fun isKnownInternalDisplay(display: Display): Boolean {
+        if (display.displayId == Display.DEFAULT_DISPLAY) return true
+        // Private displays (FLAG_PRIVATE) are internal to system/hardware (e.g., Galaxy Z Flip cover screens)
+        if ((display.flags and Display.FLAG_PRIVATE) != 0) return true
+        val name = display.name?.lowercase() ?: ""
+        return name.contains("cover") || name.contains("sub") || name.contains("builtin") || name.contains("built-in")
+    }
 
-        if (externalDisplays.isNotEmpty()) {
-            val firstExternal = externalDisplays.first()
-            val newDisplayId = firstExternal.displayId
+    private fun findBestExternalDisplay(): Display? {
+        // Priority 1: Official Presentation category displays that are public and not internal
+        val presentationDisplays = displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
+        val validPresentation = presentationDisplays.firstOrNull { display ->
+            !isKnownInternalDisplay(display)
+        }
+        if (validPresentation != null) return validPresentation
+
+        // Priority 2: Any display with FLAG_PRESENTATION that is not private/internal
+        val displays = displayManager.displays
+        val presentationFlagged = displays.firstOrNull { display ->
+            (display.flags and Display.FLAG_PRESENTATION) != 0 && !isKnownInternalDisplay(display)
+        }
+        if (presentationFlagged != null) return presentationFlagged
+
+        // Priority 3: Any non-default display that is public (no FLAG_PRIVATE) and not known internal
+        return displays.firstOrNull { display ->
+            !isKnownInternalDisplay(display)
+        }
+    }
+
+    private fun checkExternalDisplays() {
+        val targetDisplay = findBestExternalDisplay()
+
+        if (targetDisplay != null) {
+            val newDisplayId = targetDisplay.displayId
             
             if (externalDisplayId == newDisplayId) {
                 // Already connected, verify trackpad mode and overlay cursor are enabled
@@ -738,7 +766,7 @@ class MainActivity : AppCompatActivity() {
             tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
             tvStatusBadge.setBackgroundResource(R.drawable.bg_rounded_search)
             tvStatusBadge.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
-            tvConnectionInfo.text = "Glasses display connected: ID $externalDisplayId (${firstExternal.name})"
+            tvConnectionInfo.text = "Glasses display connected: ID $externalDisplayId (${targetDisplay.name})"
             
             // Activate trackpad
             activateTrackpadMode()
@@ -755,15 +783,15 @@ class MainActivity : AppCompatActivity() {
                 startActivity(intent, options.toBundle())
             } catch (e: SecurityException) {
                 e.printStackTrace()
-                Toast.makeText(this, "Security restriction: Cannot launch External View on secondary display. Fallback to standard launch...", Toast.LENGTH_LONG).show()
-                try {
-                    val intent = Intent(this, ExternalActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    startActivity(intent)
-                } catch (ex: Exception) {
-                    ex.printStackTrace()
-                }
+                Log.e("MainActivity", "Security restriction: Cannot launch on display $externalDisplayId: ${e.message}")
+                Toast.makeText(this, "Security restriction: Cannot launch External View on display $externalDisplayId", Toast.LENGTH_LONG).show()
+                externalDisplayId = -1
+                tvStatusBadge.text = "ERROR"
+                tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.neon_danger))
+                tvStatusBadge.setBackgroundResource(R.drawable.bg_rounded_search)
+                tvStatusBadge.backgroundTintList = null
+                tvConnectionInfo.text = "Security denial on external display."
+                deactivateTrackpadMode()
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(this, "Failed to launch on glasses display: ${e.message}", Toast.LENGTH_LONG).show()
@@ -778,7 +806,6 @@ class MainActivity : AppCompatActivity() {
             deactivateTrackpadMode()
         }
     }
-
     private fun setupDisplayListener() {
         displayManager.registerDisplayListener(object : DisplayManager.DisplayListener {
             override fun onDisplayAdded(displayId: Int) {
