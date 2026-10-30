@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.app.UiModeManager
 import android.os.Handler
 import android.os.Looper
 import android.graphics.PixelFormat
@@ -743,6 +744,30 @@ class MainActivity : AppCompatActivity() {
         return name.contains("cover") || name.contains("sub") || name.contains("builtin") || name.contains("built-in")
     }
 
+    private fun isSamsungDeXOrDesktopMode(): Boolean {
+        // Method 1: Check standard Android UI Mode for DESK
+        val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+        if (uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_DESK) {
+            return true
+        }
+
+        // Method 2: Check Samsung proprietary SEM_DESKTOP_MODE_ENABLED via reflection
+        try {
+            val config = resources.configuration
+            val configClass = config.javaClass
+            val enabledField = configClass.getField("SEM_DESKTOP_MODE_ENABLED")
+            val stateField = configClass.getField("semDesktopModeEnabled")
+            val enabledConstant = enabledField.getInt(configClass)
+            val currentState = stateField.getInt(config)
+            if (enabledConstant == currentState) {
+                return true
+            }
+        } catch (_: Exception) {
+            // Not Samsung device or field not accessible
+        }
+        return false
+    }
+
     private fun findBestExternalDisplay(): Display? {
         // Priority 1: Official Presentation category displays that are public and not internal
         val presentationDisplays = displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
@@ -793,7 +818,13 @@ class MainActivity : AppCompatActivity() {
             // Switch to APPS tab automatically
             tabLayout.getTabAt(1)?.select()
 
-            // Auto-launch ExternalActivity on target display
+            // Auto-launch ExternalActivity on target display (skip if running in Samsung DeX mode)
+            if (isSamsungDeXOrDesktopMode()) {
+                tvConnectionInfo.text = "Samsung DeX connected: ID $externalDisplayId"
+                Toast.makeText(this, "Samsung DeX detected. Operating in Remote Controller mode.", Toast.LENGTH_SHORT).show()
+                return
+            }
+
             try {
                 val options = ActivityOptions.makeBasic()
                 options.launchDisplayId = externalDisplayId
@@ -843,6 +874,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun activateTrackpadMode() {
+        if (isSamsungDeXOrDesktopMode()) {
+            // Under Samsung DeX mode, DeX uses the system mouse pointer / trackpad.
+            // Do not spawn an overlay cursor to prevent ghost cursor freezes.
+            tvTrackpadInstruction.visibility = View.VISIBLE
+            (tvTrackpadInstruction as? TextView)?.text = "Samsung DeX Mode Active\nUsing system pointer"
+            return
+        }
         tvTrackpadInstruction.visibility = View.GONE
         showOverlayCursor()
     }
@@ -861,6 +899,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showOverlayCursor() {
         if (externalDisplayId == -1) return
+        if (isSamsungDeXOrDesktopMode()) return
         if (!Settings.canDrawOverlays(this)) return
 
         runOnUiThread {
