@@ -22,6 +22,9 @@ object InteractionBridge {
     var desktopForegroundStateListener: ((Boolean) -> Unit)? = null
     var appLaunchedFromExternalListener: ((String) -> Unit)? = null
     var foregroundPackageChangedListener: ((String) -> Unit)? = null
+    var dragStartListener: ((Float, Float) -> Unit)? = null
+    var dragMoveListener: ((Float, Float) -> Unit)? = null
+    var dragEndListener: ((Float, Float) -> Unit)? = null
     var isKeyboardActive: Boolean = false
 
     fun sendScreenshotRequest() {
@@ -86,6 +89,18 @@ object InteractionBridge {
 
     fun sendForegroundPackageChanged(packageName: String) {
         runOnMain { foregroundPackageChangedListener?.invoke(packageName) }
+    }
+
+    fun sendDragStart(x: Float, y: Float) {
+        runOnMain { dragStartListener?.invoke(x, y) }
+    }
+
+    fun sendDragMove(x: Float, y: Float) {
+        runOnMain { dragMoveListener?.invoke(x, y) }
+    }
+
+    fun sendDragEnd(x: Float, y: Float) {
+        runOnMain { dragEndListener?.invoke(x, y) }
     }
 
     private fun runOnMain(action: () -> Unit) {

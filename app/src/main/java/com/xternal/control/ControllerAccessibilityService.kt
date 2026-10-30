@@ -5,6 +5,9 @@ import android.accessibilityservice.GestureDescription
 import android.content.Intent
 import android.graphics.Path
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -15,7 +18,27 @@ class ControllerAccessibilityService : AccessibilityService() {
         @Volatile
         var instance: ControllerAccessibilityService? = null
             private set
+
+        // Duration of each continued-stroke segment while a held touch follows the trackpad
+        private const val HELD_SEGMENT_MS = 16L
     }
+
+    // Held touch: one virtual finger kept down across several dispatchGesture calls using
+    // continued strokes, so apps see a single DOWN -> MOVE... -> UP stream (scrolling, drag & drop)
+    private val heldTouchHandler = Handler(Looper.getMainLooper())
+    private var heldStroke: GestureDescription.StrokeDescription? = null
+    private var heldDisplayId = -1
+    private var heldSession = 0
+    // Last point dispatched; each continuation must start exactly here or the system cancels the gesture
+    private var heldX = 0f
+    private var heldY = 0f
+    private var heldTargetX = 0f
+    private var heldTargetY = 0f
+    private var heldLiftPending = false
+    // When the injector will have played everything dispatched so far (or the long-press hold ends)
+    private var heldQueueEndTime = 0L
+    private var heldFlushScheduled = false
+    private val heldFlushRunnable = Runnable { flushHeldTouch() }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -24,11 +47,13 @@ class ControllerAccessibilityService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
+        resetHeldTouch()
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         instance = null
+        resetHeldTouch()
         super.onDestroy()
     }
 
@@ -170,6 +195,124 @@ class ControllerAccessibilityService : AccessibilityService() {
             e.printStackTrace()
             false
         }
+    }
+
+    // Puts a virtual finger down and keeps it there until endHeldTouch(). Movement is held back for holdMs so the
+    // app registers a long press first; onHeld runs once that hold elapses with the finger still down.
+    // Starting a new held touch cancels any previous one (the app receives ACTION_CANCEL).
+    fun beginHeldTouch(displayId: Int, x: Float, y: Float, holdMs: Long = 0, onHeld: (() -> Unit)? = null): Boolean {
+        heldTouchHandler.removeCallbacks(heldFlushRunnable)
+        heldFlushScheduled = false
+        heldLiftPending = false
+        heldSession++
+
+        val px = snapHeldCoordinate(x)
+        val py = snapHeldCoordinate(y)
+        val stroke = GestureDescription.StrokeDescription(Path().apply { moveTo(px, py) }, 0, HELD_SEGMENT_MS, true)
+        heldStroke = stroke
+        heldDisplayId = displayId
+        heldX = px
+        heldY = py
+        heldTargetX = px
+        heldTargetY = py
+        heldQueueEndTime = SystemClock.uptimeMillis() + maxOf(holdMs, HELD_SEGMENT_MS)
+
+        if (!dispatchHeldSegment(stroke)) {
+            heldStroke = null
+            return false
+        }
+        if (onHeld != null) {
+            val session = heldSession
+            heldTouchHandler.postDelayed({
+                if (session == heldSession && heldStroke != null && !heldLiftPending) onHeld()
+            }, holdMs)
+        }
+        return true
+    }
+
+    // Returns false if no held touch is active (e.g. the system cancelled it)
+    fun moveHeldTouch(x: Float, y: Float): Boolean {
+        if (heldStroke == null || heldLiftPending) return false
+        heldTargetX = snapHeldCoordinate(x)
+        heldTargetY = snapHeldCoordinate(y)
+        scheduleHeldFlush()
+        return true
+    }
+
+    // Lifts the finger after any pending movement and the rest of a long-press hold
+    fun endHeldTouch() {
+        if (heldStroke == null) return
+        heldLiftPending = true
+        scheduleHeldFlush()
+    }
+
+    // Gestures are injected at whole pixels, so rounding here skips segments that would not move
+    private fun snapHeldCoordinate(value: Float): Float = Math.round(value).coerceAtLeast(0).toFloat()
+
+    private fun scheduleHeldFlush() {
+        if (heldFlushScheduled) return
+        heldFlushScheduled = true
+        // Coalesce movement into one segment per HELD_SEGMENT_MS so dispatched segments never queue up and add lag
+        val delay = (heldQueueEndTime - SystemClock.uptimeMillis()).coerceAtLeast(0)
+        heldTouchHandler.postDelayed(heldFlushRunnable, delay)
+    }
+
+    private fun flushHeldTouch() {
+        heldFlushScheduled = false
+        val previous = heldStroke ?: return
+        val lift = heldLiftPending
+        val moved = heldTargetX != heldX || heldTargetY != heldY
+        if (!moved && !lift) return
+
+        val path = Path().apply {
+            moveTo(heldX, heldY)
+            if (moved) lineTo(heldTargetX, heldTargetY)
+        }
+        val stroke = try {
+            previous.continueStroke(path, 0, HELD_SEGMENT_MS, !lift)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            resetHeldTouch()
+            return
+        }
+        heldX = heldTargetX
+        heldY = heldTargetY
+        heldQueueEndTime = maxOf(SystemClock.uptimeMillis(), heldQueueEndTime) + HELD_SEGMENT_MS
+        heldStroke = if (lift) null else stroke
+        heldLiftPending = false
+
+        if (!dispatchHeldSegment(stroke)) {
+            heldStroke = null
+        }
+    }
+
+    private fun dispatchHeldSegment(stroke: GestureDescription.StrokeDescription): Boolean {
+        val session = heldSession
+        val builder = GestureDescription.Builder().apply {
+            addStroke(stroke)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && heldDisplayId > 0) {
+                setDisplayId(heldDisplayId)
+            }
+        }
+        return try {
+            dispatchGesture(builder.build(), object : AccessibilityService.GestureResultCallback() {
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    super.onCancelled(gestureDescription)
+                    // The system dropped the virtual finger, so further continuations would be rejected
+                    if (session == heldSession) resetHeldTouch()
+                }
+            }, null)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    private fun resetHeldTouch() {
+        heldTouchHandler.removeCallbacks(heldFlushRunnable)
+        heldFlushScheduled = false
+        heldLiftPending = false
+        heldStroke = null
     }
 
     fun dispatchZoom(displayId: Int, centerX: Float, centerY: Float, isZoomIn: Boolean): Boolean {

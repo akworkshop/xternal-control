@@ -112,95 +112,159 @@
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- 🪟 Windows Start Menu Popup (Centered above Start Button) -->
+        <!-- 🪟 Windows 11 Start Menu Popup (Centered above Start Button) -->
         <androidx.cardview.widget.CardView
             android:id="@+id/layoutStartMenu"
-            android:layout_width="340dp"
-            android:layout_height="440dp"
+            android:layout_width="530dp"
+            android:layout_height="match_parent"
+            android:layout_marginTop="20dp"
             android:layout_centerHorizontal="true"
             android:layout_above="@id/layoutTaskbar"
-            android:layout_marginBottom="8dp"
+            android:layout_marginBottom="10dp"
             android:visibility="gone"
-            app:cardCornerRadius="16dp"
-            app:cardBackgroundColor="#F2161A22"
-            app:cardElevation="16dp">
+            app:cardCornerRadius="12dp"
+            app:cardBackgroundColor="#F5202020"
+            app:cardElevation="24dp">
 
             <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:padding="14dp">
+                android:background="@drawable/bg_start_menu">
 
-                <!-- Start Menu Header: Search Box -->
-                <EditText
-                    android:id="@+id/etStartMenuSearch"
+                <!-- 1. Top Search Box (Windows 11 Dark Pill Style) -->
+                <RelativeLayout
+                    android:id="@+id/layoutSearchWrapper"
                     android:layout_width="match_parent"
-                    android:layout_height="38dp"
+                    android:layout_height="36dp"
                     android:layout_alignParentTop="true"
-                    android:background="@drawable/bg_white_search_box"
-                    android:hint="Type here to search apps..."
-                    android:textColorHint="#757575"
-                    android:textColor="#121212"
-                    android:textSize="12sp"
-                    android:paddingHorizontal="14dp"
-                    android:inputType="text"
-                    android:maxLines="1"
-                    android:imeOptions="actionSearch" />
+                    android:layout_marginTop="16dp"
+                    android:layout_marginHorizontal="18dp"
+                    android:background="@drawable/bg_win11_search"
+                    android:paddingHorizontal="12dp">
 
-                <!-- Start Menu Apps List / Grid -->
+                    <TextView
+                        android:id="@+id/ivSearchIcon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:layout_alignParentStart="true"
+                        android:text="🔍"
+                        android:textColor="#4CC2FF"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/etStartMenuSearch"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_toEndOf="@id/ivSearchIcon"
+                        android:layout_marginStart="10dp"
+                        android:background="@null"
+                        android:hint="Search for apps, settings, and documents"
+                        android:textColorHint="#9E9E9E"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11.5sp"
+                        android:inputType="text"
+                        android:maxLines="1"
+                        android:imeOptions="actionSearch" />
+                </RelativeLayout>
+
+                <!-- 2. Unified Scrollable Body (Pinned 6-Col Grid + Recent 3-Col + All Alphabetical List) -->
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/rvStartMenuApps"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_below="@id/etStartMenuSearch"
+                    android:layout_below="@id/layoutSearchWrapper"
                     android:layout_above="@id/layoutStartMenuFooter"
-                    android:layout_marginTop="10dp"
-                    android:layout_marginBottom="10dp"
+                    android:layout_marginTop="8dp"
+                    android:paddingHorizontal="14dp"
+                    android:paddingBottom="8dp"
+                    android:clipToPadding="false"
                     android:scrollbars="vertical"
                     tools:listitem="@layout/item_start_menu_app" />
 
-                <!-- Start Menu Footer Bar -->
+                <!-- 3. Windows 11 Footer Bar -->
                 <RelativeLayout
                     android:id="@+id/layoutStartMenuFooter"
                     android:layout_width="match_parent"
-                    android:layout_height="40dp"
+                    android:layout_height="44dp"
                     android:layout_alignParentBottom="true"
-                    android:background="#33FFFFFF"
-                    android:paddingHorizontal="8dp">
+                    android:background="#FF171717"
+                    android:paddingHorizontal="18dp">
 
+                    <!-- Top Subtle Divider -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_alignParentTop="true"
+                        android:background="#1FFFFFFF" />
+
+                    <!-- Left: User Profile Avatar & Name -->
                     <LinearLayout
-                        android:id="@+id/btnStartGuide"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_alignParentStart="true"
                         android:layout_centerVertical="true"
-                        android:background="@drawable/bg_rounded_search"
-                        android:paddingHorizontal="10dp"
-                        android:paddingVertical="5dp"
-                        android:clickable="true"
-                        android:focusable="true">
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="26dp"
+                            android:layout_height="26dp"
+                            android:background="@drawable/bg_rounded_search"
+                            android:text="👤"
+                            android:gravity="center"
+                            android:textSize="12sp" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="ℹ️ GUIDE"
-                            android:textColor="@color/neon_cyan"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
+                            android:layout_marginStart="10dp"
+                            android:text="Xternal User"
+                            android:textColor="#E0E0E0"
+                            android:textSize="11.5sp" />
                     </LinearLayout>
 
-                    <TextView
-                        android:id="@+id/btnCloseStartMenu"
+                    <!-- Right: Guide & Power/Close Symbol -->
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true"
-                        android:text="✕ CLOSE"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="11sp"
-                        android:padding="6dp"
-                        android:clickable="true"
-                        android:focusable="true" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <LinearLayout
+                            android:id="@+id/btnStartGuide"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_rounded_search"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="3dp"
+                            android:clickable="true"
+                            android:focusable="true">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="ℹ️ Guide"
+                                android:textColor="#CCCCCC"
+                                android:textSize="10sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/btnCloseStartMenu"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:text="⏻"
+                            android:textColor="#E0E0E0"
+                            android:textSize="15sp"
+                            android:padding="6dp"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </LinearLayout>
                 </RelativeLayout>
+
             </RelativeLayout>
         </androidx.cardview.widget.CardView>
 

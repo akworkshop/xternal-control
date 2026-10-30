@@ -31,6 +31,7 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
@@ -133,6 +134,7 @@ class MainActivity : AppCompatActivity() {
 
     // Display Management
     private lateinit var displayManager: DisplayManager
+    private var displayListener: DisplayManager.DisplayListener? = null
     private var externalDisplayId: Int = -1
 
     // Trackpad gestures state
@@ -144,10 +146,16 @@ class MainActivity : AppCompatActivity() {
     private var isMultiTouch = false
     private var lastScrollDistance = 0f
     
-    // Throttled scroll variables for accessibility service
-    private var lastScrollGestureTime = 0L
-    private var accumulatedScrollDx = 0f
-    private var accumulatedScrollDy = 0f
+    // Two-finger scroll: a held virtual finger on the external display follows the fingers' midpoint
+    private val SCROLL_GAIN = 2.5f
+    private var centroidX = 0f
+    private var centroidY = 0f
+    private var twoFingerTravel = 0f
+    private var isTwoFingerScrolling = false
+    private var scrollFingerX = 0f
+    private var scrollFingerY = 0f
+    // Long-press drag: after the hold, the virtual finger stays down and follows the cursor
+    private var isDragging = false
     
     // Pinch gesture state variables
     private var initialPinchDistance = 0f
@@ -172,13 +180,25 @@ class MainActivity : AppCompatActivity() {
     private var isFirstMouseHover = true
     private val trackpadHandler = Handler(Looper.getMainLooper())
     private val longPressRunnable = Runnable {
-        cvTrackpad.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-        hasDraggedOrScrolled = true
-        InteractionBridge.sendLongClick()
-        
-        val service = ControllerAccessibilityService.instance
-        if (externalDisplayId != -1 && service != null) {
-            service.dispatchLongClick(externalDisplayId, overlayCursorX, overlayCursorY)
+        if (!isMultiTouch) {
+            hasDraggedOrScrolled = true
+            
+            val service = ControllerAccessibilityService.instance
+            if (externalDisplayId != -1 && service != null) {
+                // Hold still until the app registers a long press (haptic = picked up), then follow the cursor to drag
+                val holdMs = ViewConfiguration.getLongPressTimeout() + 100L
+                isDragging = service.beginHeldTouch(externalDisplayId, overlayCursorX, overlayCursorY, holdMs) {
+                    cvTrackpad.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS, android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
+                    viewCursorMirror.animate().scaleX(1.4f).scaleY(1.4f).setDuration(120).start()
+                    InteractionBridge.sendDragStart(overlayCursorX, overlayCursorY)
+                }
+            }
+            if (!isDragging) {
+                cvTrackpad.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS, android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
+                viewCursorMirror.animate().scaleX(1.4f).scaleY(1.4f).setDuration(120).start()
+                InteractionBridge.sendDragStart(overlayCursorX, overlayCursorY)
+                InteractionBridge.sendLongClick()
+            }
         }
     }
 
@@ -807,7 +827,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private fun setupDisplayListener() {
-        displayManager.registerDisplayListener(object : DisplayManager.DisplayListener {
+        val listener = object : DisplayManager.DisplayListener {
             override fun onDisplayAdded(displayId: Int) {
                 checkExternalDisplays()
             }
@@ -817,7 +837,9 @@ class MainActivity : AppCompatActivity() {
             override fun onDisplayChanged(displayId: Int) {
                 checkExternalDisplays()
             }
-        }, null)
+        }
+        displayListener = listener
+        displayManager.registerDisplayListener(listener, null)
     }
 
     private fun activateTrackpadMode() {
@@ -944,6 +966,7 @@ class MainActivity : AppCompatActivity() {
         activeMediaPackage = packageName
         updateMediaAppInfo(packageName)
         hideOverlayCursor()
+        loadListsFromPreferences()
         // Track recents: move to start
         recentPackages.remove(packageName)
         recentPackages.add(0, packageName)
@@ -1007,60 +1030,41 @@ class MainActivity : AppCompatActivity() {
                     downTime = System.currentTimeMillis()
                     isMultiTouch = false
                     hasDraggedOrScrolled = false
+                    twoFingerTravel = 0f
+                    isTwoFingerScrolling = false
+                    isDragging = false
                     viewCursorMirror.visibility = View.VISIBLE
                     viewCursorMirror.x = x
                     viewCursorMirror.y = y
 
-                    // Queue long press check
+                    // Queue long press check (Method 2: 400ms hold to grab)
                     trackpadHandler.removeCallbacks(longPressRunnable)
-                    trackpadHandler.postDelayed(longPressRunnable, 600)
+                    trackpadHandler.postDelayed(longPressRunnable, 400)
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     isMultiTouch = true
                     hasDraggedOrScrolled = true
                     trackpadHandler.removeCallbacks(longPressRunnable)
-                    if (event.pointerCount >= 2) {
-                        accumulatedScrollDx = 0f
-                        accumulatedScrollDy = 0f
-                        lastScrollGestureTime = System.currentTimeMillis()
+                    if (isDragging) {
+                        isDragging = false
+                        ControllerAccessibilityService.instance?.endHeldTouch()
+                        InteractionBridge.sendDragEnd(overlayCursorX, overlayCursorY)
+                        viewCursorMirror.scaleX = 1f
+                        viewCursorMirror.scaleY = 1f
                     }
+                    updatePointerCentroid(event)
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val totalMoved = Math.hypot((x - startX).toDouble(), (y - startY).toDouble())
-                    if (totalMoved > 10) {
+                    if (!isDragging && totalMoved > 15) {
                         hasDraggedOrScrolled = true
                         trackpadHandler.removeCallbacks(longPressRunnable)
                     }
-                    if (isMultiTouch && event.pointerCount >= 2) {
-                        // Two-finger scroll drag
-                        val scrollDx = (x - lastX) * 2.5f
-                        val scrollDy = (y - lastY) * 2.5f
-                        InteractionBridge.sendScroll(scrollDy)
-
-                        accumulatedScrollDx += scrollDx
-                        accumulatedScrollDy += scrollDy
-                        val currentTime = System.currentTimeMillis()
-                        if (currentTime - lastScrollGestureTime > 80) {
-                            val service = ControllerAccessibilityService.instance
-                            if (externalDisplayId != -1 && service != null) {
-                                val absDx = Math.abs(accumulatedScrollDx)
-                                val absDy = Math.abs(accumulatedScrollDy)
-
-                                if (absDx > absDy && absDx > dpToPx(4)) {
-                                    val endX = (overlayCursorX + accumulatedScrollDx * 1.5f).coerceIn(0f, externalDisplayWidth.toFloat())
-                                    service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, endX, overlayCursorY)
-                                    accumulatedScrollDx = 0f
-                                    accumulatedScrollDy = 0f
-                                    lastScrollGestureTime = currentTime
-                                } else if (absDy > absDx && absDy > dpToPx(4)) {
-                                    val endY = (overlayCursorY + accumulatedScrollDy * 1.5f).coerceIn(0f, externalDisplayHeight.toFloat())
-                                    service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
-                                    accumulatedScrollDx = 0f
-                                    accumulatedScrollDy = 0f
-                                    lastScrollGestureTime = currentTime
-                                }
-                            }
-                        }
+                    if (isMultiTouch && event.pointerCount >= 2 && !isDragging) {
+                        val previousX = centroidX
+                        val previousY = centroidY
+                        updatePointerCentroid(event)
+                        updateTwoFingerScroll(centroidX - previousX, centroidY - previousY)
                     } else {
                         // Single finger movement
                         val dx = x - lastX
@@ -1070,6 +1074,11 @@ class MainActivity : AppCompatActivity() {
                         
                         viewCursorMirror.x = x
                         viewCursorMirror.y = y
+
+                        if (isDragging) {
+                            ControllerAccessibilityService.instance?.moveHeldTouch(overlayCursorX, overlayCursorY)
+                            InteractionBridge.sendDragMove(overlayCursorX, overlayCursorY)
+                        }
                     }
                     lastX = x
                     lastY = y
@@ -1077,56 +1086,58 @@ class MainActivity : AppCompatActivity() {
                 MotionEvent.ACTION_UP -> {
                     trackpadHandler.removeCallbacks(longPressRunnable)
                     viewCursorMirror.visibility = View.GONE
+                    viewCursorMirror.scaleX = 1f
+                    viewCursorMirror.scaleY = 1f
                     val duration = System.currentTimeMillis() - downTime
                     
-                    if (!hasDraggedOrScrolled && duration < 250) {
+                    if (isDragging) {
+                        isDragging = false
+                        ControllerAccessibilityService.instance?.endHeldTouch()
+                        cvTrackpad.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP, android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
+                        InteractionBridge.sendDragEnd(overlayCursorX, overlayCursorY)
+                        trackpadHandler.postDelayed({
+                            loadListsFromPreferences()
+                            sortAndRefreshAppLists()
+                        }, 100)
+                        hasDraggedOrScrolled = true
+                    } else if (isTwoFingerScrolling) {
+                        ControllerAccessibilityService.instance?.endHeldTouch()
+                    } else if (!hasDraggedOrScrolled && duration < 250) {
                         performLeftClick()
-                    } else if (isMultiTouch) {
-                        val service = ControllerAccessibilityService.instance
-                        if (externalDisplayId != -1 && service != null) {
-                            val absDx = Math.abs(accumulatedScrollDx)
-                            val absDy = Math.abs(accumulatedScrollDy)
-                            if (absDx > absDy && absDx > dpToPx(5)) {
-                                val endX = (overlayCursorX + accumulatedScrollDx * 1.5f).coerceIn(0f, externalDisplayWidth.toFloat())
-                                service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, endX, overlayCursorY)
-                            } else if (absDy > absDx && absDy > dpToPx(5)) {
-                                val endY = (overlayCursorY + accumulatedScrollDy * 1.5f).coerceIn(0f, externalDisplayHeight.toFloat())
-                                service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
-                            }
-                        }
-                        accumulatedScrollDx = 0f
-                        accumulatedScrollDy = 0f
                     }
+                    isDragging = false
+                    isTwoFingerScrolling = false
                     isMultiTouch = false
                     cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
                 }
                 MotionEvent.ACTION_CANCEL -> {
+                    trackpadHandler.removeCallbacks(longPressRunnable)
+                    if (isDragging) {
+                        isDragging = false
+                        ControllerAccessibilityService.instance?.endHeldTouch()
+                        InteractionBridge.sendDragEnd(overlayCursorX, overlayCursorY)
+                        viewCursorMirror.scaleX = 1f
+                        viewCursorMirror.scaleY = 1f
+                    } else if (isTwoFingerScrolling) {
+                        ControllerAccessibilityService.instance?.endHeldTouch()
+                    }
+                    isDragging = false
+                    isTwoFingerScrolling = false
                     isMultiTouch = false
                     cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
                 }
                 MotionEvent.ACTION_POINTER_UP -> {
                     val duration = System.currentTimeMillis() - downTime
-                    val absDx = Math.abs(accumulatedScrollDx)
-                    val absDy = Math.abs(accumulatedScrollDy)
-                    if (isMultiTouch && duration < 300 && absDx < dpToPx(8) && absDy < dpToPx(8)) {
-                        performRightClick()
-                    } else if (isMultiTouch) {
-                        val service = ControllerAccessibilityService.instance
-                        if (externalDisplayId != -1 && service != null) {
-                            if (absDx > absDy && absDx > dpToPx(5)) {
-                                val endX = (overlayCursorX + accumulatedScrollDx * 1.5f).coerceIn(0f, externalDisplayWidth.toFloat())
-                                service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, endX, overlayCursorY)
-                                accumulatedScrollDx = 0f
-                                accumulatedScrollDy = 0f
-                                lastScrollGestureTime = System.currentTimeMillis()
-                            } else if (absDy > absDx && absDy > dpToPx(5)) {
-                                val endY = (overlayCursorY + accumulatedScrollDy * 1.5f).coerceIn(0f, externalDisplayHeight.toFloat())
-                                service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
-                                accumulatedScrollDx = 0f
-                                accumulatedScrollDy = 0f
-                                lastScrollGestureTime = System.currentTimeMillis()
-                            }
+                    if (event.pointerCount <= 2) {
+                        // Back to one finger: release the scroll (lift-off speed carries into a fling) or treat as a two-finger tap
+                        if (isTwoFingerScrolling) {
+                            ControllerAccessibilityService.instance?.endHeldTouch()
+                            isTwoFingerScrolling = false
+                        } else if (isMultiTouch && !isDragging && duration < 300 && twoFingerTravel < dpToPx(6)) {
+                            performRightClick()
                         }
+                    } else {
+                        updatePointerCentroid(event, event.actionIndex)
                     }
 
                     val actionIndex = event.actionIndex
@@ -1139,6 +1150,59 @@ class MainActivity : AppCompatActivity() {
             }
             true
         }
+    }
+
+    // Midpoint of the fingers on the trackpad, optionally ignoring the pointer that is lifting
+    private fun updatePointerCentroid(event: MotionEvent, skipIndex: Int = -1) {
+        var sumX = 0f
+        var sumY = 0f
+        var count = 0
+        for (i in 0 until event.pointerCount) {
+            if (i == skipIndex) continue
+            sumX += event.getX(i)
+            sumY += event.getY(i)
+            count++
+        }
+        if (count > 0) {
+            centroidX = sumX / count
+            centroidY = sumY / count
+        }
+    }
+
+    private fun updateTwoFingerScroll(dx: Float, dy: Float) {
+        // Ignore small wobble so a two-finger tap still right-clicks
+        if (twoFingerTravel < dpToPx(6)) {
+            twoFingerTravel += Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+            return
+        }
+
+        val service = ControllerAccessibilityService.instance
+        if (service == null) {
+            InteractionBridge.sendScroll(dy * SCROLL_GAIN)
+            return
+        }
+        if (!isTwoFingerScrolling) {
+            startTwoFingerScroll(service)
+            return
+        }
+
+        val nextX = scrollFingerX + dx * SCROLL_GAIN
+        val nextY = scrollFingerY + dy * SCROLL_GAIN
+        if (nextX !in 0f..externalDisplayWidth - 1f || nextY !in 0f..externalDisplayHeight - 1f) {
+            // Virtual finger reached the screen edge: put it down again near the cursor, like re-gripping a trackpad
+            startTwoFingerScroll(service)
+        } else {
+            scrollFingerX = nextX
+            scrollFingerY = nextY
+            isTwoFingerScrolling = service.moveHeldTouch(scrollFingerX, scrollFingerY)
+        }
+    }
+
+    private fun startTwoFingerScroll(service: ControllerAccessibilityService) {
+        // Press at the cursor but away from the edges, so there is room to scroll in every direction
+        scrollFingerX = overlayCursorX.coerceIn(externalDisplayWidth * 0.1f, externalDisplayWidth * 0.9f)
+        scrollFingerY = overlayCursorY.coerceIn(externalDisplayHeight * 0.1f, externalDisplayHeight * 0.9f)
+        isTwoFingerScrolling = service.beginHeldTouch(externalDisplayId, scrollFingerX, scrollFingerY)
     }
 
 
@@ -1935,8 +1999,13 @@ class MainActivity : AppCompatActivity() {
         val sortedApps = filteredApps.sortedWith(compareBy<AppInfo> { it.isLocked }
             .thenByDescending { it.isFavourite }
             .thenBy { app ->
-                val index = recentPackages.indexOf(app.packageName)
-                if (index != -1) index else Int.MAX_VALUE
+                if (app.isFavourite) {
+                    val favIdx = favouritePackages.indexOf(app.packageName)
+                    if (favIdx != -1) favIdx else Int.MAX_VALUE
+                } else {
+                    val index = recentPackages.indexOf(app.packageName)
+                    if (index != -1) index else Int.MAX_VALUE
+                }
             }
             .thenBy { it.label.lowercase() }
         )
@@ -1956,6 +2025,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleAppFavourite(app: AppInfo) {
+        loadListsFromPreferences()
         if (favouritePackages.contains(app.packageName)) {
             favouritePackages.remove(app.packageName)
             Toast.makeText(this, "${app.label} removed from Favourites", Toast.LENGTH_SHORT).show()
@@ -2549,5 +2619,10 @@ class MainActivity : AppCompatActivity() {
         if (::billingManager.isInitialized) {
             billingManager.destroy()
         }
+
+        // The accessibility service keeps the process alive after this activity is gone, so release
+        // the display listener and the app-context cursor overlay or they pile up as phantom cursors
+        displayListener?.let { displayManager.unregisterDisplayListener(it) }
+        hideOverlayCursor()
     }
 }

@@ -8,10 +8,12 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 
 class DesktopIconsAdapter(
-    private var apps: List<AppInfo>,
+    apps: List<AppInfo>,
     private val onItemClick: (AppInfo) -> Unit,
     private val onItemLongClick: ((AppInfo) -> Unit)? = null
 ) : RecyclerView.Adapter<DesktopIconsAdapter.ViewHolder>() {
+
+    private var appList: MutableList<AppInfo> = apps.toMutableList()
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val ivDesktopIcon: ImageView = view.findViewById(R.id.ivDesktopIcon)
@@ -24,7 +26,7 @@ class DesktopIconsAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val app = apps[position]
+        val app = appList[position]
         holder.tvDesktopAppName.text = app.label
         holder.ivDesktopIcon.setImageDrawable(app.icon)
         if (app.isLocked) {
@@ -39,16 +41,33 @@ class DesktopIconsAdapter(
         }
 
         holder.itemView.setOnClickListener { onItemClick(app) }
-        holder.itemView.setOnLongClickListener {
-            onItemLongClick?.invoke(app)
-            true
+        if (onItemLongClick != null) {
+            holder.itemView.setOnLongClickListener {
+                onItemLongClick.invoke(app)
+                true
+            }
+        } else {
+            holder.itemView.setOnLongClickListener(null)
+            holder.itemView.isLongClickable = false
         }
     }
 
-    override fun getItemCount(): Int = apps.size
+    override fun getItemCount(): Int = appList.size
 
     fun updateData(newApps: List<AppInfo>) {
-        this.apps = newApps
+        this.appList = newApps.toMutableList()
         notifyDataSetChanged()
     }
+
+    fun moveItem(fromPos: Int, toPos: Int): Boolean {
+        if (fromPos in appList.indices && toPos in appList.indices && fromPos != toPos) {
+            val item = appList.removeAt(fromPos)
+            appList.add(toPos, item)
+            notifyItemMoved(fromPos, toPos)
+            return true
+        }
+        return false
+    }
+
+    fun getItems(): List<AppInfo> = appList
 }

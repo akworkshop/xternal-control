@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/layoutStartMenuPinnedItem"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:paddingVertical="8dp"
+    android:paddingHorizontal="3dp"
+    android:background="?android:attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true">
+
+    <ImageView
+        android:id="@+id/ivStartMenuPinnedIcon"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:scaleType="fitCenter"
+        android:contentDescription="Pinned App Icon" />
+
+    <TextView
+        android:id="@+id/tvStartMenuPinnedAppName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="center"
+        android:text="App Name"
+        android:textColor="#FFFFFF"
+        android:textSize="10sp"
+        android:maxLines="2"
+        android:ellipsize="end" />
+
+</LinearLayout>

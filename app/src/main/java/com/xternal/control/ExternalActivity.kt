@@ -60,13 +60,18 @@ class ExternalActivity : AppCompatActivity() {
     private lateinit var btnBuyMeCoffee: View
     private lateinit var billingManager: BillingManager
 
-    // Start Menu Elements
+    // Start Menu Elements (Windows 11 24H2 Style)
     private lateinit var layoutStartMenu: View
     private lateinit var etStartMenuSearch: EditText
     private lateinit var rvStartMenuApps: RecyclerView
     private lateinit var startMenuAdapter: StartMenuAppsAdapter
     private lateinit var btnStartGuide: View
     private lateinit var btnCloseStartMenu: View
+
+    // Desktop Reorder / Drag Variables
+    private var draggingViewHolder: RecyclerView.ViewHolder? = null
+    private var draggingCurrentPos: Int = -1
+    private var draggingHasMoved: Boolean = false
 
     // Taskbar Elements
     private lateinit var layoutTaskbar: View
@@ -194,7 +199,7 @@ class ExternalActivity : AppCompatActivity() {
 
         updateDesktopSupportCard()
 
-        // Start Menu
+        // Start Menu (Windows 11 24H2 Style)
         layoutStartMenu = findViewById(R.id.layoutStartMenu)
         etStartMenuSearch = findViewById(R.id.etStartMenuSearch)
         rvStartMenuApps = findViewById(R.id.rvStartMenuApps)
@@ -295,7 +300,19 @@ class ExternalActivity : AppCompatActivity() {
     }
 
     private fun toggleStartMenu() {
-        layoutStartMenu.visibility = if (layoutStartMenu.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        val willShow = (layoutStartMenu.visibility != View.VISIBLE)
+        if (willShow) {
+            if (::startMenuAdapter.isInitialized) {
+                startMenuAdapter.resetExpansionState()
+            }
+            etStartMenuSearch.text?.clear()
+            appSearchQuery = ""
+            sortAndRefreshAppLists()
+            rvStartMenuApps.scrollToPosition(0)
+            layoutStartMenu.visibility = View.VISIBLE
+        } else {
+            layoutStartMenu.visibility = View.GONE
+        }
     }
 
     private fun updateSystemTrayStatus() {
@@ -351,7 +368,7 @@ class ExternalActivity : AppCompatActivity() {
         desktopAdapter = DesktopIconsAdapter(
             apps = emptyList(),
             onItemClick = { app -> launchApp(app.packageName) },
-            onItemLongClick = { app -> toggleAppFavourite(app) }
+            onItemLongClick = null // Press & Hold on desktop icons is exclusively for Drag & Drop reordering
         )
         rvDesktopIcons.layoutManager = GridLayoutManager(this, 5, RecyclerView.HORIZONTAL, false)
         rvDesktopIcons.adapter = desktopAdapter
@@ -365,16 +382,21 @@ class ExternalActivity : AppCompatActivity() {
         rvTaskbarApps.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         rvTaskbarApps.adapter = taskbarAdapter
 
-        // 3. Start Menu Apps Adapter (Vertical list)
+        // 3. Unified Windows 11 24H2 Start Menu Adapter (Pinned 6-col + Recent 3-col + All List/Grid)
         startMenuAdapter = StartMenuAppsAdapter(
-            apps = allApps,
             onItemClick = { app ->
                 layoutStartMenu.visibility = View.GONE
                 launchApp(app.packageName)
             },
             onItemLongClick = { app -> toggleAppFavourite(app) }
         )
-        rvStartMenuApps.layoutManager = LinearLayoutManager(this)
+        val startMenuLayoutManager = GridLayoutManager(this, 6)
+        startMenuLayoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(position: Int): Int {
+                return startMenuAdapter.getSpanSize(position)
+            }
+        }
+        rvStartMenuApps.layoutManager = startMenuLayoutManager
         rvStartMenuApps.adapter = startMenuAdapter
 
         sortAndRefreshAppLists()
@@ -471,19 +493,33 @@ class ExternalActivity : AppCompatActivity() {
         }
         allApps = updatedApps
 
-        // Favorite Apps for Desktop and Taskbar (unlocked clickable apps first)
+        // Favorite Apps for Desktop, Taskbar and Start Menu Pinned (respecting custom dragged order)
         val favApps = allApps.filter { it.isFavourite }
-            .sortedWith(compareBy<AppInfo> { it.isLocked }.thenBy { it.label.lowercase(Locale.getDefault()) })
+            .sortedWith(compareBy<AppInfo> { it.isLocked }.thenBy { 
+                val idx = favouritePackages.indexOf(it.packageName)
+                if (idx >= 0) idx else Int.MAX_VALUE
+            })
         desktopAdapter.updateData(favApps)
         taskbarAdapter.updateData(favApps)
 
-        // Filtered apps for Start Menu (unlocked clickable apps first)
+        // Recent Apps for Start Menu Recent section
+        val recApps = recentPackages.mapNotNull { pkg ->
+            allApps.find { it.packageName == pkg }
+        }.sortedBy { it.isLocked }
+
+        // Filtered apps for Start Menu All Apps (unlocked clickable apps first)
         val filteredStartApps = (if (appSearchQuery.isEmpty()) {
             allApps
         } else {
             allApps.filter { it.label.contains(appSearchQuery, ignoreCase = true) }
         }).sortedWith(compareBy<AppInfo> { it.isLocked }.thenBy { it.label.lowercase(Locale.getDefault()) })
-        startMenuAdapter.updateData(filteredStartApps)
+
+        startMenuAdapter.updateSections(
+            pinned = favApps,
+            recent = recApps,
+            all = filteredStartApps,
+            query = appSearchQuery
+        )
     }
 
     private fun toggleAppFavourite(app: AppInfo) {
@@ -515,6 +551,11 @@ class ExternalActivity : AppCompatActivity() {
                 return
             }
         }
+
+        recentPackages.remove(packageName)
+        recentPackages.add(0, packageName)
+        saveListsToPreferences()
+        sortAndRefreshAppLists()
 
         when (packageName) {
             "mock.browser" -> {
@@ -647,13 +688,74 @@ class ExternalActivity : AppCompatActivity() {
                 }
                 .start()
 
-            injectLongTouchEvent(cursorX, cursorY)
+            // Do not trigger long click if we are grabbing/dragging a desktop icon
+            if (draggingViewHolder == null) {
+                injectLongTouchEvent(cursorX, cursorY)
+            }
         }
 
         InteractionBridge.rightClickListener = {
             cvContextMenu.x = cursorX.coerceAtMost(screenWidth - cvContextMenu.width)
             cvContextMenu.y = cursorY.coerceAtMost(screenHeight - cvContextMenu.height)
             cvContextMenu.visibility = View.VISIBLE
+        }
+
+        InteractionBridge.dragStartListener = { _, _ ->
+            if (launcherContainer.visibility == View.VISIBLE &&
+                layoutStartMenu.visibility != View.VISIBLE &&
+                cvContextMenu.visibility != View.VISIBLE
+            ) {
+                val loc = IntArray(2)
+                rvDesktopIcons.getLocationOnScreen(loc)
+                val relX = cursorX - loc[0]
+                val relY = cursorY - loc[1]
+                val child = rvDesktopIcons.findChildViewUnder(relX, relY)
+                if (child != null) {
+                    val vh = rvDesktopIcons.getChildViewHolder(child)
+                    if (vh != null) {
+                        draggingViewHolder = vh
+                        draggingCurrentPos = vh.bindingAdapterPosition
+                        draggingHasMoved = false
+                        child.animate().scaleX(1.18f).scaleY(1.18f).alpha(0.85f).setDuration(120).start()
+                    }
+                }
+            }
+        }
+
+        InteractionBridge.dragMoveListener = { _, _ ->
+            if (draggingViewHolder != null && draggingCurrentPos != -1) {
+                val loc = IntArray(2)
+                rvDesktopIcons.getLocationOnScreen(loc)
+                val relX = cursorX - loc[0]
+                val relY = cursorY - loc[1]
+                val targetChild = rvDesktopIcons.findChildViewUnder(relX, relY)
+                if (targetChild != null) {
+                    val targetVh = rvDesktopIcons.getChildViewHolder(targetChild)
+                    if (targetVh != null) {
+                        val targetPos = targetVh.bindingAdapterPosition
+                        if (targetPos != -1 && targetPos != draggingCurrentPos) {
+                            if (desktopAdapter.moveItem(draggingCurrentPos, targetPos)) {
+                                draggingCurrentPos = targetPos
+                                draggingHasMoved = true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        InteractionBridge.dragEndListener = { _, _ ->
+            if (draggingViewHolder != null) {
+                val child = draggingViewHolder?.itemView
+                child?.animate()?.scaleX(1.0f)?.scaleY(1.0f)?.alpha(1.0f)?.setDuration(120)?.start()
+                val moved = draggingHasMoved
+                draggingViewHolder = null
+                draggingCurrentPos = -1
+                draggingHasMoved = false
+                if (moved) {
+                    saveDesktopOrderFromAdapter()
+                }
+            }
         }
 
         InteractionBridge.scrollListener = { scrollDy ->
@@ -806,6 +908,9 @@ class ExternalActivity : AppCompatActivity() {
         sharedPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key?.startsWith("glasses_bg_") == true || key?.startsWith("wallpaper_") == true) {
                 applyBackgroundTheme()
+            } else if ((key == "favourite_packages" || key == "recent_packages") && draggingViewHolder == null) {
+                loadListsFromPreferences()
+                sortAndRefreshAppLists()
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(sharedPrefsListener)
@@ -1018,6 +1123,16 @@ class ExternalActivity : AppCompatActivity() {
                 recentPackages.clear()
             }
         }
+    }
+
+    private fun saveDesktopOrderFromAdapter() {
+        val currentDesktopApps = desktopAdapter.getItems()
+        favouritePackages.clear()
+        favouritePackages.addAll(currentDesktopApps.map { it.packageName })
+        saveListsToPreferences()
+        taskbarAdapter.updateData(currentDesktopApps)
+        sortAndRefreshAppLists()
+        Toast.makeText(this, "Desktop layout saved", Toast.LENGTH_SHORT).show()
     }
 
     private fun saveListsToPreferences() {
