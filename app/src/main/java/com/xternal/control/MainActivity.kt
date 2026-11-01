@@ -744,14 +744,40 @@ class MainActivity : AppCompatActivity() {
         return name.contains("cover") || name.contains("sub") || name.contains("builtin") || name.contains("built-in")
     }
 
-    private fun isSamsungDeXOrDesktopMode(): Boolean {
-        // Method 1: Check standard Android UI Mode for DESK
+    private fun isSamsungDeXOrDesktopMode(targetDisplay: Display? = null): Boolean {
+        // Method 1: Check standard Android UI Mode for DESK on current activity context
         val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
         if (uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_DESK) {
             return true
         }
 
-        // Method 2: Check Samsung proprietary SEM_DESKTOP_MODE_ENABLED via reflection
+        // Method 2: If a target external display is provided (or when checking active externalDisplayId),
+        // inspect the display's own dedicated Context and Configuration (handles Samsung DeX Dual Mode)
+        val displayToCheck = targetDisplay ?: if (externalDisplayId != -1) displayManager.getDisplay(externalDisplayId) else null
+        if (displayToCheck != null) {
+            try {
+                val displayContext = createDisplayContext(displayToCheck)
+                val extConfig = displayContext.resources.configuration
+                if ((extConfig.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_DESK) {
+                    return true
+                }
+                val configClass = extConfig.javaClass
+                val enabledField = configClass.getField("SEM_DESKTOP_MODE_ENABLED")
+                val stateField = configClass.getField("semDesktopModeEnabled")
+                if (enabledField.getInt(configClass) == stateField.getInt(extConfig)) {
+                    return true
+                }
+            } catch (_: Exception) {
+                // Secondary display context reflection failed or not Samsung
+            }
+
+            val displayName = displayToCheck.name?.lowercase() ?: ""
+            if (displayName.contains("dex") || displayName.contains("desktop")) {
+                return true
+            }
+        }
+
+        // Method 3: Check Samsung proprietary SEM_DESKTOP_MODE_ENABLED on phone context via reflection
         try {
             val config = resources.configuration
             val configClass = config.javaClass
@@ -819,7 +845,7 @@ class MainActivity : AppCompatActivity() {
             tabLayout.getTabAt(1)?.select()
 
             // Auto-launch ExternalActivity on target display (skip if running in Samsung DeX mode)
-            if (isSamsungDeXOrDesktopMode()) {
+            if (isSamsungDeXOrDesktopMode(targetDisplay)) {
                 tvConnectionInfo.text = "Samsung DeX connected: ID $externalDisplayId"
                 Toast.makeText(this, "Samsung DeX detected. Operating in Remote Controller mode.", Toast.LENGTH_SHORT).show()
                 return
