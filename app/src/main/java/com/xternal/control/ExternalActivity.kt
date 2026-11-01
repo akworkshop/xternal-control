@@ -8,6 +8,7 @@ import com.xternal.control.billing.BillingManager
 import com.xternal.control.billing.BillingManagerProvider
 import android.content.IntentFilter
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.media.AudioManager
@@ -868,6 +869,32 @@ class ExternalActivity : AppCompatActivity() {
         }
     }
 
+    private fun decodeSampledBitmapFromFile(path: String, reqWidth: Int, reqHeight: Int): Bitmap? {
+        return try {
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeFile(path, options)
+
+            var inSampleSize = 1
+            if (options.outHeight > reqHeight || options.outWidth > reqWidth) {
+                val halfHeight = options.outHeight / 2
+                val halfWidth = options.outWidth / 2
+                while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                    inSampleSize *= 2
+                }
+            }
+
+            options.inJustDecodeBounds = false
+            options.inSampleSize = inSampleSize
+            options.inPreferredConfig = Bitmap.Config.RGB_565
+            BitmapFactory.decodeFile(path, options)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     private fun applyBackgroundTheme() {
         val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
         val bgType = prefs.getString("glasses_bg_type", "default") ?: "default"
@@ -876,8 +903,15 @@ class ExternalActivity : AppCompatActivity() {
             "image" -> {
                 val wallpaperFile = File(filesDir, "glasses_wallpaper.png")
                 if (wallpaperFile.exists()) {
-                    val bmp = android.graphics.BitmapFactory.decodeFile(wallpaperFile.absolutePath)
-                    ivExtBackground.setImageBitmap(bmp)
+                    val displayMetrics = resources.displayMetrics
+                    val reqW = if (displayMetrics.widthPixels > 0) displayMetrics.widthPixels else 1920
+                    val reqH = if (displayMetrics.heightPixels > 0) displayMetrics.heightPixels else 1080
+                    val bmp = decodeSampledBitmapFromFile(wallpaperFile.absolutePath, reqW, reqH)
+                    if (bmp != null) {
+                        ivExtBackground.setImageBitmap(bmp)
+                    } else {
+                        ivExtBackground.setImageResource(R.drawable.bg_default_wallpaper)
+                    }
                     ivExtBackground.visibility = View.VISIBLE
                 } else {
                     ivExtBackground.setImageResource(R.drawable.bg_default_wallpaper)
