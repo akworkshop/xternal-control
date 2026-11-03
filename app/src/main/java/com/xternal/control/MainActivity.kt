@@ -1,4 +1,4 @@
-﻿package com.xternal.control
+package com.xternal.control
 
 import android.util.Log
 import android.app.ActivityOptions
@@ -1951,30 +1951,13 @@ class MainActivity : AppCompatActivity() {
     private fun performLeftClick() {
         val service = ControllerAccessibilityService.instance
         if (externalDisplayId != -1 && service != null) {
-            // First check if the click target is a text selection action popup ("Copy", "Paste", etc.)
-            // Clicking the node directly prevents sending a raw touch down that would clear selection!
-            val consumed = service.performTextAction("copy", overlayCursorX, overlayCursorY) ||
-                           service.performTextAction("paste", overlayCursorX, overlayCursorY) ||
-                           service.performTextAction("select_all", overlayCursorX, overlayCursorY) ||
-                           service.performTextAction("cut", overlayCursorX, overlayCursorY)
-            if (!consumed) {
-                service.dispatchClick(externalDisplayId, overlayCursorX, overlayCursorY)
-            }
+            service.dispatchClick(externalDisplayId, overlayCursorX, overlayCursorY)
         } else {
             InteractionBridge.sendClick()
         }
     }
 
     private fun performRightClick() {
-        val service = ControllerAccessibilityService.instance
-        if (externalDisplayId != -1 && service != null) {
-            // Two-finger tap / right-click: if a text selection "Copy" is visible on screen, execute copy immediately!
-            val copied = service.performTextAction("copy", overlayCursorX, overlayCursorY)
-            if (copied) {
-                Toast.makeText(this, "Copied to clipboard ✓", Toast.LENGTH_SHORT).show()
-                return
-            }
-        }
         InteractionBridge.sendRightClick()
     }
 
