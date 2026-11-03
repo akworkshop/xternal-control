@@ -28,6 +28,7 @@
             android:name=".ExternalActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:taskAffinity="com.xternal.control.external"
             android:resizeableActivity="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density"
             android:theme="@style/Theme.XternalControl">

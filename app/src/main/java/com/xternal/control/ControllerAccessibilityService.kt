@@ -40,6 +40,14 @@ class ControllerAccessibilityService : AccessibilityService() {
     private var heldFlushScheduled = false
     private val heldFlushRunnable = Runnable { flushHeldTouch() }
 
+    // Dual-finger held touch for continuous, real pinch-to-zoom
+    private var heldStroke2: GestureDescription.StrokeDescription? = null
+    private var heldX2 = 0f
+    private var heldY2 = 0f
+    private var heldTargetX2 = 0f
+    private var heldTargetY2 = 0f
+    private var isDualHeldTouch = false
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
@@ -216,6 +224,7 @@ class ControllerAccessibilityService : AccessibilityService() {
         heldTargetX = px
         heldTargetY = py
         heldQueueEndTime = SystemClock.uptimeMillis() + maxOf(holdMs, HELD_SEGMENT_MS)
+        isDualHeldTouch = false
 
         if (!dispatchHeldSegment(stroke)) {
             heldStroke = null
@@ -227,6 +236,71 @@ class ControllerAccessibilityService : AccessibilityService() {
                 if (session == heldSession && heldStroke != null && !heldLiftPending) onHeld()
             }, holdMs)
         }
+        return true
+    }
+
+    // Begins a continuous two-finger pinch gesture at (x1, y1) and (x2, y2).
+    // The two virtual fingers stay pressed down on the external display until endHeldTouch() is called.
+    fun beginDualHeldTouch(displayId: Int, x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
+        heldTouchHandler.removeCallbacks(heldFlushRunnable)
+        heldFlushScheduled = false
+        heldLiftPending = false
+        heldSession++
+
+        val px1 = snapHeldCoordinate(x1)
+        val py1 = snapHeldCoordinate(y1)
+        val px2 = snapHeldCoordinate(x2)
+        val py2 = snapHeldCoordinate(y2)
+
+        val stroke1 = GestureDescription.StrokeDescription(Path().apply { moveTo(px1, py1) }, 0, HELD_SEGMENT_MS, true)
+        val stroke2 = GestureDescription.StrokeDescription(Path().apply { moveTo(px2, py2) }, 0, HELD_SEGMENT_MS, true)
+
+        heldStroke = stroke1
+        heldStroke2 = stroke2
+        heldDisplayId = displayId
+        heldX = px1
+        heldY = py1
+        heldTargetX = px1
+        heldTargetY = py1
+
+        heldX2 = px2
+        heldY2 = py2
+        heldTargetX2 = px2
+        heldTargetY2 = py2
+
+        isDualHeldTouch = true
+        heldQueueEndTime = SystemClock.uptimeMillis() + HELD_SEGMENT_MS
+
+        val session = heldSession
+        val builder = GestureDescription.Builder().apply {
+            addStroke(stroke1)
+            addStroke(stroke2)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && heldDisplayId > 0) {
+                setDisplayId(heldDisplayId)
+            }
+        }
+        return try {
+            dispatchGesture(builder.build(), object : AccessibilityService.GestureResultCallback() {
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    super.onCancelled(gestureDescription)
+                    if (session == heldSession) resetHeldTouch()
+                }
+            }, null)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            resetHeldTouch()
+            false
+        }
+    }
+
+    // Updates the positions of both fingers in a dual-finger pinch gesture
+    fun moveDualHeldTouch(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
+        if (heldStroke == null || heldStroke2 == null || heldLiftPending || !isDualHeldTouch) return false
+        heldTargetX = snapHeldCoordinate(x1)
+        heldTargetY = snapHeldCoordinate(y1)
+        heldTargetX2 = snapHeldCoordinate(x2)
+        heldTargetY2 = snapHeldCoordinate(y2)
+        scheduleHeldFlush()
         return true
     }
 
@@ -259,8 +333,72 @@ class ControllerAccessibilityService : AccessibilityService() {
 
     private fun flushHeldTouch() {
         heldFlushScheduled = false
-        val previous = heldStroke ?: return
+        val previous1 = heldStroke ?: return
         val lift = heldLiftPending
+
+        if (isDualHeldTouch) {
+            val previous2 = heldStroke2
+            if (previous2 == null) {
+                resetHeldTouch()
+                return
+            }
+            val moved1 = heldTargetX != heldX || heldTargetY != heldY
+            val moved2 = heldTargetX2 != heldX2 || heldTargetY2 != heldY2
+            if (!moved1 && !moved2 && !lift) return
+
+            val path1 = Path().apply {
+                moveTo(heldX, heldY)
+                if (moved1) lineTo(heldTargetX, heldTargetY)
+            }
+            val path2 = Path().apply {
+                moveTo(heldX2, heldY2)
+                if (moved2) lineTo(heldTargetX2, heldTargetY2)
+            }
+
+            val stroke1: GestureDescription.StrokeDescription
+            val stroke2: GestureDescription.StrokeDescription
+            try {
+                stroke1 = previous1.continueStroke(path1, 0, HELD_SEGMENT_MS, !lift)
+                stroke2 = previous2.continueStroke(path2, 0, HELD_SEGMENT_MS, !lift)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                resetHeldTouch()
+                return
+            }
+
+            heldX = heldTargetX
+            heldY = heldTargetY
+            heldX2 = heldTargetX2
+            heldY2 = heldTargetY2
+
+            heldQueueEndTime = maxOf(SystemClock.uptimeMillis(), heldQueueEndTime) + HELD_SEGMENT_MS
+            heldStroke = if (lift) null else stroke1
+            heldStroke2 = if (lift) null else stroke2
+            heldLiftPending = false
+
+            val session = heldSession
+            val builder = GestureDescription.Builder().apply {
+                addStroke(stroke1)
+                addStroke(stroke2)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && heldDisplayId > 0) {
+                    setDisplayId(heldDisplayId)
+                }
+            }
+            try {
+                dispatchGesture(builder.build(), object : AccessibilityService.GestureResultCallback() {
+                    override fun onCancelled(gestureDescription: GestureDescription?) {
+                        super.onCancelled(gestureDescription)
+                        if (session == heldSession) resetHeldTouch()
+                    }
+                }, null)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                resetHeldTouch()
+            }
+            return
+        }
+
+        val previous = previous1
         val moved = heldTargetX != heldX || heldTargetY != heldY
         if (!moved && !lift) return
 
@@ -313,6 +451,8 @@ class ControllerAccessibilityService : AccessibilityService() {
         heldFlushScheduled = false
         heldLiftPending = false
         heldStroke = null
+        heldStroke2 = null
+        isDualHeldTouch = false
     }
 
     fun dispatchZoom(displayId: Int, centerX: Float, centerY: Float, isZoomIn: Boolean): Boolean {

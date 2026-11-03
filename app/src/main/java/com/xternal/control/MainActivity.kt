@@ -76,9 +76,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnGrantOverlay: Button
     private lateinit var tvPermAccessibility: TextView
     private lateinit var btnGrantAccessibility: Button
-    private lateinit var cvZoomSlider: View
-    private lateinit var viewSliderHandle: View
-    private lateinit var tvSliderHint: View
     private lateinit var btnPipMode: View
     private lateinit var btnToggleCursor: View
     private lateinit var rvAppsHorizontal: RecyclerView
@@ -316,9 +313,6 @@ class MainActivity : AppCompatActivity() {
         cardMediaControls = findViewById(R.id.cardMediaControls)
         rvAppsHorizontal = findViewById(R.id.rvAppsHorizontal)
         cvTrackpad = findViewById(R.id.cvTrackpad)
-        cvZoomSlider = findViewById(R.id.cvZoomSlider)
-        viewSliderHandle = findViewById(R.id.viewSliderHandle)
-        tvSliderHint = findViewById(R.id.tvSliderHint)
         tvTrackpadInstruction = findViewById(R.id.tvTrackpadInstruction)
         viewCursorMirror = findViewById(R.id.viewCursorMirror)
         btnPipMode = findViewById(R.id.btnPipMode)
@@ -373,53 +367,6 @@ class MainActivity : AppCompatActivity() {
             override fun onTabReselected(tab: TabLayout.Tab) {}
         })
 
-        var sliderStartX = 0f
-        var sliderLastTriggerX = 0f
-
-        cvZoomSlider.setOnTouchListener { _, event ->
-            if (externalDisplayId == -1) {
-                return@setOnTouchListener false
-            }
-
-            val x = event.x
-
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    sliderStartX = x
-                    sliderLastTriggerX = x
-                    tvSliderHint.animate().alpha(0f).setDuration(150).start()
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val deltaX = x - sliderStartX
-                    val maxTranslation = dpToPx(100).toFloat()
-                    val constrainedTranslation = deltaX.coerceIn(-maxTranslation, maxTranslation)
-                    viewSliderHandle.translationX = constrainedTranslation
-
-                    val totalDx = x - sliderLastTriggerX
-                    val threshold = dpToPx(16).toFloat()
-
-                    if (Math.abs(totalDx) > threshold) {
-                        val currentTime = System.currentTimeMillis()
-                        if (currentTime - lastZoomTime > 300) {
-                            cvZoomSlider.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
-                            val isZoomIn = totalDx > 0
-                            InteractionBridge.sendZoom(isZoomIn)
-                            val service = ControllerAccessibilityService.instance
-                            if (externalDisplayId != -1 && service != null) {
-                                service.dispatchZoom(externalDisplayId, overlayCursorX, overlayCursorY, isZoomIn)
-                            }
-                            lastZoomTime = currentTime
-                            sliderLastTriggerX = x
-                        }
-                    }
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    viewSliderHandle.animate().translationX(0f).setDuration(200).start()
-                    tvSliderHint.animate().alpha(0.6f).setDuration(200).start()
-                }
-            }
-            true
-        }
 
         val btnTheaterMode = findViewById<View>(R.id.btnTheaterMode)
         val layoutTheaterModeOverlay = findViewById<View>(R.id.layoutTheaterModeOverlay)
