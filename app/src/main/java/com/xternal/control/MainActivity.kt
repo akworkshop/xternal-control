@@ -156,11 +156,12 @@ class MainActivity : AppCompatActivity() {
     private var isDragging = false
     
     // Pinch gesture state variables
-    private var initialPinchDistance = 0f
-    private var isPinchGesture = false
-    private var lastPinchDistance = 0f
+    private var initialPinchSpan = 0f
+    private var isTwoFingerZooming = false
+    private var twoFingerMode = 0 // 0 = undecided, 1 = scroll, 2 = zoom
+    private val PINCH_BASE_RADIUS = 120f
+    private var currentZoomSpan = 120f
     private var hasDraggedOrScrolled = false
-    private var twoFingerMode = 0
     private val zoomHandler = Handler(Looper.getMainLooper())
     private var zoomRunnable: Runnable? = null
     private var lastZoomTime = 0L
@@ -214,6 +215,42 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // If launched directly inside Samsung DeX / external desktop display,
+        // launch ExternalActivity on the external display first, then move MainActivity
+        // (the remote controller / trackpad) onto the phone's internal display (Display 0)
+        // so it replaces the Samsung DeX Touchpad and shows the full remote UI on the phone.
+        val currentDisplayId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try { display?.displayId ?: Display.DEFAULT_DISPLAY } catch (_: Exception) { Display.DEFAULT_DISPLAY }
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.displayId
+        }
+        if (currentDisplayId != Display.DEFAULT_DISPLAY && !intent.getBooleanExtra("MOVED_TO_PHONE_DISPLAY", false)) {
+            try {
+                // 1. Launch ExternalActivity on this external/DeX display
+                val extOptions = ActivityOptions.makeBasic()
+                extOptions.launchDisplayId = currentDisplayId
+                val extIntent = Intent(this, ExternalActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+                }
+                startActivity(extIntent, extOptions.toBundle())
+
+                // 2. Re-launch MainActivity on the phone's internal display (DEFAULT_DISPLAY = 0)
+                val phoneOptions = ActivityOptions.makeBasic()
+                phoneOptions.launchDisplayId = Display.DEFAULT_DISPLAY
+                val phoneIntent = Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    putExtra("MOVED_TO_PHONE_DISPLAY", true)
+                }
+                startActivity(phoneIntent, phoneOptions.toBundle())
+                finish()
+                return
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Could not relocate MainActivity from display $currentDisplayId to phone display: ${e.message}")
+            }
+        }
+
         billingManager = BillingManagerProvider.getInstance(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
@@ -541,6 +578,7 @@ class MainActivity : AppCompatActivity() {
 
                     InteractionBridge.sendCursorMove(dx, dy)
                     updateOverlayCursor(dx, dy)
+                    cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
                 } else {
                     isFirstMouseHover = false
                 }
@@ -562,6 +600,7 @@ class MainActivity : AppCompatActivity() {
                         val endY = (overlayCursorY - scrollDy).coerceIn(0f, externalDisplayHeight.toFloat())
                         service.dispatchScroll(externalDisplayId, overlayCursorX, overlayCursorY, overlayCursorX, endY)
                     }
+                    cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
                 }
                 return true
             }
@@ -769,10 +808,7 @@ class MainActivity : AppCompatActivity() {
             val newDisplayId = targetDisplay.displayId
             
             if (externalDisplayId == newDisplayId) {
-                // Already connected, verify trackpad mode and overlay cursor are enabled
-                if (overlayCursorView == null && Settings.canDrawOverlays(this)) {
-                    showOverlayCursor()
-                }
+                // Already connected
                 return
             }
 
@@ -784,19 +820,16 @@ class MainActivity : AppCompatActivity() {
             tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
             tvStatusBadge.setBackgroundResource(R.drawable.bg_rounded_search)
             tvStatusBadge.backgroundTintList = ContextCompat.getColorStateList(this, R.color.neon_emerald)
-            tvConnectionInfo.text = "Glasses display connected: ID $externalDisplayId (${targetDisplay.name})"
+            tvConnectionInfo.text = if (isSamsungDeXOrDesktopMode(targetDisplay)) {
+                "Samsung DeX connected: ID $externalDisplayId (${targetDisplay.name})"
+            } else {
+                "Glasses display connected: ID $externalDisplayId (${targetDisplay.name})"
+            }
             
             // Activate trackpad
             activateTrackpadMode()
             // Switch to APPS tab automatically
             tabLayout.getTabAt(1)?.select()
-
-            // Auto-launch ExternalActivity on target display (skip if running in Samsung DeX mode)
-            if (isSamsungDeXOrDesktopMode(targetDisplay)) {
-                tvConnectionInfo.text = "Samsung DeX connected: ID $externalDisplayId"
-                Toast.makeText(this, "Samsung DeX detected. Operating in Remote Controller mode.", Toast.LENGTH_SHORT).show()
-                return
-            }
 
             try {
                 val options = ActivityOptions.makeBasic()
@@ -847,15 +880,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun activateTrackpadMode() {
-        if (isSamsungDeXOrDesktopMode()) {
-            // Under Samsung DeX mode, DeX uses the system mouse pointer / trackpad.
-            // Do not spawn an overlay cursor to prevent ghost cursor freezes.
-            tvTrackpadInstruction.visibility = View.VISIBLE
-            (tvTrackpadInstruction as? TextView)?.text = "Samsung DeX Mode Active\nUsing system pointer"
-            return
-        }
         tvTrackpadInstruction.visibility = View.GONE
-        showOverlayCursor()
+        // Pre-initialize display dimensions for cursor bounds, but keep cursor hidden until user touches trackpad
+        val display = displayManager.getDisplay(externalDisplayId)
+        if (display != null) {
+            val metrics = DisplayMetrics()
+            display.getRealMetrics(metrics)
+            externalDisplayWidth = metrics.widthPixels
+            externalDisplayHeight = metrics.heightPixels
+            overlayCursorX = externalDisplayWidth / 2f
+            overlayCursorY = externalDisplayHeight / 2f
+        }
     }
 
     private fun deactivateTrackpadMode() {
@@ -872,7 +907,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun showOverlayCursor() {
         if (externalDisplayId == -1) return
-        if (isSamsungDeXOrDesktopMode()) return
         if (!Settings.canDrawOverlays(this)) return
 
         runOnUiThread {
@@ -1044,6 +1078,8 @@ class MainActivity : AppCompatActivity() {
                     hasDraggedOrScrolled = false
                     twoFingerTravel = 0f
                     isTwoFingerScrolling = false
+                    isTwoFingerZooming = false
+                    twoFingerMode = 0
                     isDragging = false
                     viewCursorMirror.visibility = View.VISIBLE
                     viewCursorMirror.x = x
@@ -1065,6 +1101,11 @@ class MainActivity : AppCompatActivity() {
                         viewCursorMirror.scaleY = 1f
                     }
                     updatePointerCentroid(event)
+                    if (event.pointerCount >= 2) {
+                        initialPinchSpan = getPointerDistance(event)
+                        twoFingerTravel = 0f
+                        twoFingerMode = 0
+                    }
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val totalMoved = Math.hypot((x - startX).toDouble(), (y - startY).toDouble())
@@ -1076,8 +1117,29 @@ class MainActivity : AppCompatActivity() {
                         val previousX = centroidX
                         val previousY = centroidY
                         updatePointerCentroid(event)
-                        updateTwoFingerScroll(centroidX - previousX, centroidY - previousY)
-                    } else {
+                        val dx = centroidX - previousX
+                        val dy = centroidY - previousY
+                        val currentSpan = getPointerDistance(event)
+
+                        if (twoFingerMode == 0) {
+                            twoFingerTravel += Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                            val spanDelta = Math.abs(currentSpan - initialPinchSpan)
+
+                            // Clear deadzone: lock into Pinch-to-Zoom vs Two-Finger Scroll
+                            if (spanDelta > dpToPx(24) && spanDelta > twoFingerTravel * 1.15f) {
+                                twoFingerMode = 2 // Locked to Zoom
+                                initialPinchSpan = currentSpan
+                            } else if (twoFingerTravel > dpToPx(16)) {
+                                twoFingerMode = 1 // Locked to Scroll
+                            }
+                        }
+
+                        if (twoFingerMode == 2) {
+                            updateTwoFingerZoom(currentSpan)
+                        } else if (twoFingerMode == 1) {
+                            updateTwoFingerScroll(dx, dy)
+                        }
+                    } else if (!isMultiTouch) {
                         // Single finger movement
                         val dx = x - lastX
                         val dy = y - lastY
@@ -1112,13 +1174,15 @@ class MainActivity : AppCompatActivity() {
                             sortAndRefreshAppLists()
                         }, 100)
                         hasDraggedOrScrolled = true
-                    } else if (isTwoFingerScrolling) {
+                    } else if (isTwoFingerScrolling || isTwoFingerZooming) {
                         ControllerAccessibilityService.instance?.endHeldTouch()
                     } else if (!hasDraggedOrScrolled && duration < 250) {
                         performLeftClick()
                     }
                     isDragging = false
                     isTwoFingerScrolling = false
+                    isTwoFingerZooming = false
+                    twoFingerMode = 0
                     isMultiTouch = false
                     cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
                 }
@@ -1130,22 +1194,26 @@ class MainActivity : AppCompatActivity() {
                         InteractionBridge.sendDragEnd(overlayCursorX, overlayCursorY)
                         viewCursorMirror.scaleX = 1f
                         viewCursorMirror.scaleY = 1f
-                    } else if (isTwoFingerScrolling) {
+                    } else if (isTwoFingerScrolling || isTwoFingerZooming) {
                         ControllerAccessibilityService.instance?.endHeldTouch()
                     }
                     isDragging = false
                     isTwoFingerScrolling = false
+                    isTwoFingerZooming = false
+                    twoFingerMode = 0
                     isMultiTouch = false
                     cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
                 }
                 MotionEvent.ACTION_POINTER_UP -> {
                     val duration = System.currentTimeMillis() - downTime
                     if (event.pointerCount <= 2) {
-                        // Back to one finger: release the scroll (lift-off speed carries into a fling) or treat as a two-finger tap
-                        if (isTwoFingerScrolling) {
+                        // Back to one finger: release the scroll/zoom or treat as a two-finger tap
+                        if (isTwoFingerScrolling || isTwoFingerZooming) {
                             ControllerAccessibilityService.instance?.endHeldTouch()
                             isTwoFingerScrolling = false
-                        } else if (isMultiTouch && !isDragging && duration < 300 && twoFingerTravel < dpToPx(6)) {
+                            isTwoFingerZooming = false
+                            twoFingerMode = 0
+                        } else if (isMultiTouch && !isDragging && duration < 300 && twoFingerTravel < dpToPx(6) && Math.abs(getPointerDistance(event) - initialPinchSpan) < dpToPx(12)) {
                             performRightClick()
                         }
                     } else {
@@ -1215,6 +1283,29 @@ class MainActivity : AppCompatActivity() {
         scrollFingerX = overlayCursorX.coerceIn(externalDisplayWidth * 0.1f, externalDisplayWidth * 0.9f)
         scrollFingerY = overlayCursorY.coerceIn(externalDisplayHeight * 0.1f, externalDisplayHeight * 0.9f)
         isTwoFingerScrolling = service.beginHeldTouch(externalDisplayId, scrollFingerX, scrollFingerY)
+    }
+
+    private fun updateTwoFingerZoom(currentSpan: Float) {
+        val service = ControllerAccessibilityService.instance ?: return
+        val centerX = overlayCursorX.coerceIn(externalDisplayWidth * 0.2f, externalDisplayWidth * 0.8f)
+        val centerY = overlayCursorY.coerceIn(externalDisplayHeight * 0.2f, externalDisplayHeight * 0.8f)
+
+        if (!isTwoFingerZooming) {
+            initialPinchSpan = currentSpan.coerceAtLeast(10f)
+            currentZoomSpan = PINCH_BASE_RADIUS
+            val x1 = (centerX - currentZoomSpan).coerceIn(10f, externalDisplayWidth - 10f)
+            val x2 = (centerX + currentZoomSpan).coerceIn(10f, externalDisplayWidth - 10f)
+            isTwoFingerZooming = service.beginDualHeldTouch(externalDisplayId, x1, centerY, x2, centerY)
+            return
+        }
+
+        val scaleRatio = (currentSpan / initialPinchSpan.coerceAtLeast(10f)).coerceIn(0.25f, 3.5f)
+        val targetRadius = (PINCH_BASE_RADIUS * scaleRatio).coerceIn(25f, Math.min(externalDisplayWidth, externalDisplayHeight) * 0.42f)
+        currentZoomSpan = targetRadius
+
+        val x1 = (centerX - currentZoomSpan).coerceIn(10f, externalDisplayWidth - 10f)
+        val x2 = (centerX + currentZoomSpan).coerceIn(10f, externalDisplayWidth - 10f)
+        isTwoFingerZooming = service.moveDualHeldTouch(x1, centerY, x2, centerY)
     }
 
 
@@ -2255,6 +2346,10 @@ class MainActivity : AppCompatActivity() {
     private fun setupBridgeListeners() {
         InteractionBridge.appLaunchedFromExternalListener = { pkg ->
             try {
+                // Hide cursor when opening an app until user moves the cursor again
+                cursorHideHandler.removeCallbacks(cursorHideRunnable)
+                hideOverlayCursor()
+
                 if (pkg != packageName) {
                     isDesktopActive = false
                     lastLaunchedExternalPackage = pkg
