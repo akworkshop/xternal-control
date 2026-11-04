@@ -1281,15 +1281,15 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (!isTwoFingerScrolling) {
-            startTwoFingerScroll(service)
+            startTwoFingerScroll(service, dx, dy)
             return
         }
 
         val nextX = scrollFingerX + dx * SCROLL_GAIN
         val nextY = scrollFingerY + dy * SCROLL_GAIN
-        if (nextX !in 0f..externalDisplayWidth - 1f || nextY !in 0f..externalDisplayHeight - 1f) {
-            // Virtual finger reached the screen edge: put it down again near the cursor, like re-gripping a trackpad
-            startTwoFingerScroll(service)
+        if (nextX !in 10f..externalDisplayWidth - 10f || nextY !in 10f..externalDisplayHeight - 10f) {
+            // Virtual finger reached the screen edge: put it down again in the safe middle zone and immediately move it
+            startTwoFingerScroll(service, dx, dy)
         } else {
             scrollFingerX = nextX
             scrollFingerY = nextY
@@ -1297,11 +1297,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startTwoFingerScroll(service: ControllerAccessibilityService) {
-        // Press at the cursor but away from the edges, so there is room to scroll in every direction
-        scrollFingerX = overlayCursorX.coerceIn(externalDisplayWidth * 0.1f, externalDisplayWidth * 0.9f)
-        scrollFingerY = overlayCursorY.coerceIn(externalDisplayHeight * 0.1f, externalDisplayHeight * 0.9f)
+    private fun startTwoFingerScroll(service: ControllerAccessibilityService, dx: Float, dy: Float) {
+        // Anchor inside the middle 30%..70% band so quick upward/downward flicks have plenty of room before reaching an edge
+        scrollFingerX = overlayCursorX.coerceIn(externalDisplayWidth * 0.3f, externalDisplayWidth * 0.7f)
+        scrollFingerY = overlayCursorY.coerceIn(externalDisplayHeight * 0.3f, externalDisplayHeight * 0.7f)
         isTwoFingerScrolling = service.beginHeldTouch(externalDisplayId, scrollFingerX, scrollFingerY)
+        if (isTwoFingerScrolling) {
+            // Immediately queue the initial scroll movement past Android's touchSlop so lifting fingers quickly never triggers a tap/click
+            var moveX = dx * SCROLL_GAIN
+            var moveY = dy * SCROLL_GAIN
+            val dist = Math.hypot(moveX.toDouble(), moveY.toDouble()).toFloat()
+            val minSlop = dpToPx(14).toFloat()
+            if (dist > 0.1f && dist < minSlop) {
+                val scale = minSlop / dist
+                moveX *= scale
+                moveY *= scale
+            }
+            scrollFingerX = (scrollFingerX + moveX).coerceIn(10f, externalDisplayWidth - 10f)
+            scrollFingerY = (scrollFingerY + moveY).coerceIn(10f, externalDisplayHeight - 10f)
+            isTwoFingerScrolling = service.moveHeldTouch(scrollFingerX, scrollFingerY)
+        }
     }
 
     private fun updateTwoFingerZoom(currentSpan: Float) {
