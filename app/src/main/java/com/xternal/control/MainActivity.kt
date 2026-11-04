@@ -168,6 +168,7 @@ class MainActivity : AppCompatActivity() {
     private var isPipModeActive = false
     private var isDesktopActive = true
     private var lastLaunchedExternalPackage: String? = null
+    private var wasBackgrounded = false
     private var isCursorWindowAttached = false
     private val cursorHideHandler = Handler(Looper.getMainLooper())
     private val cursorHideRunnable = Runnable { hideOverlayCursor() }
@@ -320,8 +321,26 @@ class MainActivity : AppCompatActivity() {
         setupMediaDetection()
     }
 
+    override fun onPause() {
+        super.onPause()
+        wasBackgrounded = true
+        try {
+            // Clear FLAG_NOT_FOCUSABLE when leaving MainActivity so that upon returning,
+            // MainActivity can cleanly reclaim window focus on the phone display and hand it back to the external display.
+            window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+        try {
+            // Start focusable on resume so the phone display cleanly takes focus from the previous phone app / launcher first
+            window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         checkPermissions()
         checkAndShowTrialExpiredDialog()
         updateProUi()
@@ -332,6 +351,24 @@ class MainActivity : AppCompatActivity() {
         }
         if (::audioManager.isInitialized) {
             checkCurrentMediaPlayback()
+        }
+        val returningFromBackground = wasBackgrounded
+        wasBackgrounded = false
+        window?.decorView?.postDelayed({
+            updateWindowFocusabilityForTab()
+            if (returningFromBackground && ::tabLayout.isInitialized && tabLayout.selectedTabPosition == 2) {
+                refocusActiveExternalApp()
+            }
+        }, 120)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && ::tabLayout.isInitialized && tabLayout.selectedTabPosition == 2 && externalDisplayId != -1) {
+            // Once MainActivity has claimed focus on the phone screen, yield focus back to the external display after a brief beat
+            window?.decorView?.postDelayed({
+                updateWindowFocusabilityForTab()
+            }, 100)
         }
     }
 
@@ -397,6 +434,7 @@ class MainActivity : AppCompatActivity() {
                         tabSetupContainer.visibility = View.GONE
                         tabAppsContainer.visibility = View.GONE
                         tabTrackpadContainer.visibility = View.VISIBLE
+                        refocusActiveExternalApp()
                     }
                 }
                 updateWindowFocusabilityForTab(tab.position)
@@ -892,6 +930,25 @@ class MainActivity : AppCompatActivity() {
                 window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
             }
         } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun refocusActiveExternalApp() {
+        if (externalDisplayId == -1 || isDesktopActive || isPipModeActive) return
+        val targetPackage = lastLaunchedExternalPackage?.takeIf { it.isNotEmpty() } ?: activeMediaPackage
+        if (targetPackage.isEmpty() || targetPackage == packageName || targetPackage.startsWith("mock.")) return
+        try {
+            val launchIntent = packageManager.getLaunchIntentForPackage(targetPackage) ?: return
+            val options = ActivityOptions.makeBasic()
+            options.launchDisplayId = externalDisplayId
+            launchIntent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+            )
+            startActivity(launchIntent, options.toBundle())
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
     }
