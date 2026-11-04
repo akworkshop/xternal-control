@@ -399,9 +399,12 @@ class MainActivity : AppCompatActivity() {
                         tabTrackpadContainer.visibility = View.VISIBLE
                     }
                 }
+                updateWindowFocusabilityForTab(tab.position)
             }
             override fun onTabUnselected(tab: TabLayout.Tab) {}
-            override fun onTabReselected(tab: TabLayout.Tab) {}
+            override fun onTabReselected(tab: TabLayout.Tab) {
+                updateWindowFocusabilityForTab(tab.position)
+            }
         })
 
 
@@ -879,6 +882,20 @@ class MainActivity : AppCompatActivity() {
         displayManager.registerDisplayListener(listener, null)
     }
 
+    private fun updateWindowFocusabilityForTab(tabPosition: Int = if (::tabLayout.isInitialized) tabLayout.selectedTabPosition else 0) {
+        try {
+            if (tabPosition == 2 && externalDisplayId != -1) {
+                // Prevent the phone's REMOTE trackpad tab from stealing window focus from the external display
+                // (keeps Chrome's Copy/Paste selection popup and focused text fields active when touching the trackpad)
+                window.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun activateTrackpadMode() {
         tvTrackpadInstruction.visibility = View.GONE
         // Pre-initialize display dimensions for cursor bounds, but keep cursor hidden until user touches trackpad
@@ -891,6 +908,7 @@ class MainActivity : AppCompatActivity() {
             overlayCursorX = externalDisplayWidth / 2f
             overlayCursorY = externalDisplayHeight / 2f
         }
+        updateWindowFocusabilityForTab()
     }
 
     private fun deactivateTrackpadMode() {
@@ -898,6 +916,7 @@ class MainActivity : AppCompatActivity() {
         viewCursorMirror.visibility = View.GONE
         cursorHideHandler.removeCallbacks(cursorHideRunnable)
         hideOverlayCursor()
+        updateWindowFocusabilityForTab()
         runOnUiThread {
             overlayCursorView = null
             overlayWindowManager = null
