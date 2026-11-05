@@ -237,18 +237,44 @@ class MainActivity : AppCompatActivity() {
                 }
                 startActivity(extIntent, extOptions.toBundle())
 
-                // 2. Re-launch MainActivity on the phone's internal display (DEFAULT_DISPLAY = 0)
-                val phoneOptions = ActivityOptions.makeBasic()
-                phoneOptions.launchDisplayId = Display.DEFAULT_DISPLAY
-                val phoneIntent = Intent(this, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    putExtra("MOVED_TO_PHONE_DISPLAY", true)
-                }
-                startActivity(phoneIntent, phoneOptions.toBundle())
-                finish()
+                // 2. Remove this misplaced MainActivity task from the DeX/external display first,
+                // then launch MainActivity from a Display 0 context after the DeX task finishes tearing down
+                val appCtx = applicationContext
+                val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+                val phoneDisplay = dm.getDisplay(Display.DEFAULT_DISPLAY)
+                val launchCtx = if (phoneDisplay != null) appCtx.createDisplayContext(phoneDisplay) else appCtx
+
+                finishAndRemoveTask()
+
+                Handler(Looper.getMainLooper()).postDelayed({
+                    try {
+                        val phoneOptions = ActivityOptions.makeBasic()
+                        phoneOptions.launchDisplayId = Display.DEFAULT_DISPLAY
+                        val phoneIntent = Intent(launchCtx, MainActivity::class.java).apply {
+                            addFlags(
+                                Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                                Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            )
+                            putExtra("MOVED_TO_PHONE_DISPLAY", true)
+                        }
+                        launchCtx.startActivity(phoneIntent, phoneOptions.toBundle())
+                    } catch (e: Exception) {
+                        Log.w("MainActivity", "Delayed phone display launch failed: ${e.message}")
+                    }
+                }, 180)
                 return
             } catch (e: Exception) {
                 Log.w("MainActivity", "Could not relocate MainActivity from display $currentDisplayId to phone display: ${e.message}")
+            }
+        }
+
+        if (intent.getBooleanExtra("MOVED_TO_PHONE_DISPLAY", false)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setTurnScreenOn(true)
+            } else {
+                @Suppress("DEPRECATION")
+                window.addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
             }
         }
 
