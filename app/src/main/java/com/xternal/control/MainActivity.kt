@@ -221,13 +221,18 @@ class MainActivity : AppCompatActivity() {
         // launch ExternalActivity on the external display first, then move MainActivity
         // (the remote controller / trackpad) onto the phone's internal display (Display 0)
         // so it replaces the Samsung DeX Touchpad and shows the full remote UI on the phone.
-        val currentDisplayId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try { display?.displayId ?: Display.DEFAULT_DISPLAY } catch (_: Exception) { Display.DEFAULT_DISPLAY }
+        val currentDisplay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try { display } catch (_: Exception) { null }
         } else {
             @Suppress("DEPRECATION")
-            windowManager.defaultDisplay.displayId
+            windowManager.defaultDisplay
         }
-        if (currentDisplayId != Display.DEFAULT_DISPLAY && !intent.getBooleanExtra("MOVED_TO_PHONE_DISPLAY", false)) {
+        val currentDisplayId = currentDisplay?.displayId ?: Display.DEFAULT_DISPLAY
+        if (currentDisplayId != Display.DEFAULT_DISPLAY &&
+            currentDisplay != null &&
+            !isKnownInternalDisplay(currentDisplay) &&
+            !intent.getBooleanExtra("MOVED_TO_PHONE_DISPLAY", false)
+        ) {
             try {
                 // 1. Launch ExternalActivity on this external/DeX display
                 val extOptions = ActivityOptions.makeBasic()
@@ -791,6 +796,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun isKnownInternalDisplay(display: Display): Boolean {
         if (display.displayId == Display.DEFAULT_DISPLAY) return true
+        // Universal AOSP hardware check: Display.TYPE_INTERNAL == 1 covers built-in main, folding, and cover screens
+        // across all foldable brands (Samsung Galaxy Z Fold/Flip, Pixel Fold, OnePlus Open, etc.) in any language
+        try {
+            val typeMethod = display.javaClass.getMethod("getType")
+            val displayType = typeMethod.invoke(display) as? Int
+            if (displayType == 1) return true // 1 = Display.TYPE_INTERNAL
+        } catch (_: Exception) {
+            // Fallback to flags and name checks below if reflection is unavailable
+        }
         // Private displays (FLAG_PRIVATE) are internal to system/hardware (e.g., Galaxy Z Flip cover screens)
         if ((display.flags and Display.FLAG_PRIVATE) != 0) return true
         val name = display.name?.lowercase() ?: ""

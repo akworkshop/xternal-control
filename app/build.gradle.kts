@@ -14,8 +14,8 @@ android {
         applicationId = "com.xternal.control"
         minSdk = 26
         targetSdk = 36
-        versionCode = 41
-        versionName = "1.4.7"
+        versionCode = 42
+        versionName = "1.4.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
