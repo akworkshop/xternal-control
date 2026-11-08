@@ -134,6 +134,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var displayManager: DisplayManager
     private var displayListener: DisplayManager.DisplayListener? = null
     private var externalDisplayId: Int = -1
+    private val rejectedDisplayIds = mutableSetOf<Int>()
 
     // Trackpad gestures state
     private var startX = 0f
@@ -797,21 +798,79 @@ class MainActivity : AppCompatActivity() {
         sortAndRefreshAppLists()
     }
 
+    private fun getDisplayType(display: Display): Int {
+        return try {
+            val typeMethod = display.javaClass.getMethod("getType")
+            (typeMethod.invoke(display) as? Int) ?: 0
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    private fun getDisplayPixelArea(display: Display): Long {
+        return try {
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            display.getRealMetrics(metrics)
+            metrics.widthPixels.toLong() * metrics.heightPixels.toLong()
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    private fun getDisplayHardwarePriority(display: Display): Int {
+        return when (getDisplayType(display)) {
+            2 -> 3 // Display.TYPE_HDMI (Wired USB-C DisplayPort / HDMI glasses & monitors)
+            3 -> 2 // Display.TYPE_WIFI (Wireless Cast / Miracast)
+            else -> 1
+        }
+    }
+
+    private fun selectBestCandidate(candidates: Array<Display>): Display? {
+        return candidates
+            .filter { !isKnownInternalDisplay(it) }
+            .maxWithOrNull(
+                compareBy<Display> { getDisplayHardwarePriority(it) }
+                    .thenBy { getDisplayPixelArea(it) }
+            )
+    }
+
     private fun isKnownInternalDisplay(display: Display): Boolean {
         if (display.displayId == Display.DEFAULT_DISPLAY) return true
+        if (rejectedDisplayIds.contains(display.displayId)) return true
+
         // Universal AOSP hardware check: Display.TYPE_INTERNAL == 1 covers built-in main, folding, and cover screens
         // across all foldable brands (Samsung Galaxy Z Fold/Flip, Pixel Fold, OnePlus Open, etc.) in any language
-        try {
-            val typeMethod = display.javaClass.getMethod("getType")
-            val displayType = typeMethod.invoke(display) as? Int
-            if (displayType == 1) return true // 1 = Display.TYPE_INTERNAL
-        } catch (_: Exception) {
-            // Fallback to flags and name checks below if reflection is unavailable
-        }
+        val displayType = getDisplayType(display)
+        if (displayType == 1) return true // 1 = Display.TYPE_INTERNAL
+
         // Private displays (FLAG_PRIVATE) are internal to system/hardware (e.g., Galaxy Z Flip cover screens)
         if ((display.flags and Display.FLAG_PRIVATE) != 0) return true
         val name = display.name?.lowercase() ?: ""
-        return name.contains("cover") || name.contains("sub") || name.contains("builtin") || name.contains("built-in")
+        if (name.contains("cover") || name.contains("sub") || name.contains("builtin") ||
+            name.contains("built-in") || name.contains("rear") || name.contains("back") ||
+            name.contains("magic") || name.contains("extra") || name.contains("背屏") ||
+            name.contains("副屏") || name.contains("后置")
+        ) {
+            return true
+        }
+
+        // For non-HDMI (2) and non-WiFi (3) displays (e.g., Xiaomi 17/18 Pro 2.7" Magic Back Screen or
+        // OEM virtual/overlay sub-displays), filter out tiny mini-screens (< 1000px longest side)
+        if (displayType != 2 && displayType != 3) {
+            try {
+                val metrics = DisplayMetrics()
+                @Suppress("DEPRECATION")
+                display.getRealMetrics(metrics)
+                val maxSide = Math.max(metrics.widthPixels, metrics.heightPixels)
+                if (maxSide in 1..999) {
+                    return true
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        return false
     }
 
     private fun isSamsungDeXOrDesktopMode(targetDisplay: Display? = null): Boolean {
@@ -865,24 +924,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun findBestExternalDisplay(): Display? {
+        val allDisplays = displayManager.displays
+
+        // Priority 0: Any hardware-confirmed Wired HDMI/DP (TYPE_HDMI = 2) or Wireless Cast (TYPE_WIFI = 3) display
+        // Ensures real wired/wireless screens always win over OEM virtual displays (e.g. Vivo Pad 3 Pro / Xiaomi 17 Pro)
+        val hardwareExternal = allDisplays.filter {
+            val t = getDisplayType(it)
+            (t == 2 || t == 3) && !isKnownInternalDisplay(it)
+        }.toTypedArray()
+        if (hardwareExternal.isNotEmpty()) {
+            return selectBestCandidate(hardwareExternal)
+        }
+
         // Priority 1: Official Presentation category displays that are public and not internal
         val presentationDisplays = displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
-        val validPresentation = presentationDisplays.firstOrNull { display ->
-            !isKnownInternalDisplay(display)
-        }
+        val validPresentation = selectBestCandidate(presentationDisplays)
         if (validPresentation != null) return validPresentation
 
         // Priority 2: Any display with FLAG_PRESENTATION that is not private/internal
-        val displays = displayManager.displays
-        val presentationFlagged = displays.firstOrNull { display ->
-            (display.flags and Display.FLAG_PRESENTATION) != 0 && !isKnownInternalDisplay(display)
-        }
-        if (presentationFlagged != null) return presentationFlagged
+        val presentationFlagged = allDisplays.filter {
+            (it.flags and Display.FLAG_PRESENTATION) != 0
+        }.toTypedArray()
+        val validFlagged = selectBestCandidate(presentationFlagged)
+        if (validFlagged != null) return validFlagged
 
         // Priority 3: Any non-default display that is public (no FLAG_PRIVATE) and not known internal
-        return displays.firstOrNull { display ->
-            !isKnownInternalDisplay(display)
-        }
+        return selectBestCandidate(allDisplays)
     }
 
     private fun checkExternalDisplays() {
@@ -921,18 +988,29 @@ class MainActivity : AppCompatActivity() {
                 val intent = Intent(this, ExternalActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
                 }
-                startActivity(intent, options.toBundle())
+                val extContext = try {
+                    createDisplayContext(targetDisplay)
+                } catch (_: Exception) {
+                    this
+                }
+                extContext.startActivity(intent, options.toBundle())
             } catch (e: SecurityException) {
                 e.printStackTrace()
                 Log.e("MainActivity", "Security restriction: Cannot launch on display $externalDisplayId: ${e.message}")
-                Toast.makeText(this, "Security restriction: Cannot launch External View on display $externalDisplayId", Toast.LENGTH_LONG).show()
+                rejectedDisplayIds.add(newDisplayId)
                 externalDisplayId = -1
+                deactivateTrackpadMode()
+                // If another valid external display exists (e.g. after skipping a locked OEM virtual/rear display), try it immediately
+                if (findBestExternalDisplay() != null) {
+                    checkExternalDisplays()
+                    return
+                }
+                Toast.makeText(this, "Security restriction: Cannot launch External View on display $newDisplayId", Toast.LENGTH_LONG).show()
                 tvStatusBadge.text = "ERROR"
                 tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.neon_danger))
                 tvStatusBadge.setBackgroundResource(R.drawable.bg_rounded_search)
                 tvStatusBadge.backgroundTintList = null
                 tvConnectionInfo.text = "Security denial on external display."
-                deactivateTrackpadMode()
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(this, "Failed to launch on glasses display: ${e.message}", Toast.LENGTH_LONG).show()
@@ -950,9 +1028,11 @@ class MainActivity : AppCompatActivity() {
     private fun setupDisplayListener() {
         val listener = object : DisplayManager.DisplayListener {
             override fun onDisplayAdded(displayId: Int) {
+                rejectedDisplayIds.remove(displayId)
                 checkExternalDisplays()
             }
             override fun onDisplayRemoved(displayId: Int) {
+                rejectedDisplayIds.remove(displayId)
                 checkExternalDisplays()
             }
             override fun onDisplayChanged(displayId: Int) {
