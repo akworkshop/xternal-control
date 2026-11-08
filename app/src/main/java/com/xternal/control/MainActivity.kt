@@ -375,6 +375,7 @@ class MainActivity : AppCompatActivity() {
         checkPermissions()
         checkAndShowTrialExpiredDialog()
         updateProUi()
+        updateDesktopIconSizeButtonsUi()
         applyPlayStoreAppRestrictions()
         sortAndRefreshAppLists()
         if (::mediaRemoteManager.isInitialized) {
@@ -465,7 +466,9 @@ class MainActivity : AppCompatActivity() {
                         tabSetupContainer.visibility = View.GONE
                         tabAppsContainer.visibility = View.GONE
                         tabTrackpadContainer.visibility = View.VISIBLE
+                        updateWindowFocusabilityForTab(tab.position)
                         refocusActiveExternalApp()
+                        return
                     }
                 }
                 updateWindowFocusabilityForTab(tab.position)
@@ -1064,8 +1067,10 @@ class MainActivity : AppCompatActivity() {
                         PixelFormat.TRANSLUCENT
                     ).apply {
                         gravity = Gravity.TOP or Gravity.START
-                        x = overlayCursorX.toInt()
-                        y = overlayCursorY.toInt()
+                        // Offset visual cursor window by +3px from the actual tap coordinate (overlayCursorX, overlayCursorY)
+                        // so injected clicks never pass through the overlay window's bounding box (fixes Gboard external screen typing)
+                        x = overlayCursorX.toInt() + 3
+                        y = overlayCursorY.toInt() + 3
                     }
                 }
 
@@ -1107,8 +1112,8 @@ class MainActivity : AppCompatActivity() {
         overlayCursorY = (overlayCursorY + dy * scaleFactor).coerceIn(0f, externalDisplayHeight.toFloat())
 
         overlayParams?.let { params ->
-            params.x = overlayCursorX.toInt()
-            params.y = overlayCursorY.toInt()
+            params.x = overlayCursorX.toInt() + 3
+            params.y = overlayCursorY.toInt() + 3
             try {
                 overlayWindowManager?.updateViewLayout(overlayCursorView, params)
             } catch (e: Exception) {
@@ -2492,6 +2497,7 @@ class MainActivity : AppCompatActivity() {
                     if (::appAdapter.isInitialized) {
                         sortAndRefreshAppLists()
                     }
+                    runOnUiThread { updateWindowFocusabilityForTab() }
                     checkCurrentMediaPlayback()
                     window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 300)
                     window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 600)
@@ -2799,9 +2805,50 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Reset to Default Wallpaper", Toast.LENGTH_SHORT).show()
         }
 
+        findViewById<View>(R.id.btnIconSizeSmall)?.setOnClickListener {
+            setDesktopIconSize("small", "Small")
+        }
+        findViewById<View>(R.id.btnIconSizeMedium)?.setOnClickListener {
+            setDesktopIconSize("medium", "Medium")
+        }
+        findViewById<View>(R.id.btnIconSizeLarge)?.setOnClickListener {
+            setDesktopIconSize("large", "Large")
+        }
+        updateDesktopIconSizeButtonsUi()
+
         findViewById<View>(R.id.btnQuickGuide)?.setOnClickListener {
             showOnboardingGuideDialog()
         }
+    }
+
+    private fun setDesktopIconSize(sizeMode: String, label: String) {
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("desktop_icon_size", sizeMode).apply()
+        updateDesktopIconSizeButtonsUi()
+        Toast.makeText(this, "Desktop Icons: $label", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun updateDesktopIconSizeButtonsUi() {
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        val current = prefs.getString("desktop_icon_size", "small") ?: "small"
+
+        val btnSmall = findViewById<Button>(R.id.btnIconSizeSmall)
+        val btnMedium = findViewById<Button>(R.id.btnIconSizeMedium)
+        val btnLarge = findViewById<Button>(R.id.btnIconSizeLarge)
+
+        val activeBg = ContextCompat.getColorStateList(this, R.color.neon_cyan)
+        val inactiveBg = ContextCompat.getColorStateList(this, R.color.bg_card)
+        val activeText = ContextCompat.getColor(this, R.color.text_dark)
+        val inactiveText = ContextCompat.getColor(this, R.color.text_secondary)
+
+        btnSmall?.backgroundTintList = if (current == "small") activeBg else inactiveBg
+        btnSmall?.setTextColor(if (current == "small") activeText else inactiveText)
+
+        btnMedium?.backgroundTintList = if (current == "medium") activeBg else inactiveBg
+        btnMedium?.setTextColor(if (current == "medium") activeText else inactiveText)
+
+        btnLarge?.backgroundTintList = if (current == "large") activeBg else inactiveBg
+        btnLarge?.setTextColor(if (current == "large") activeText else inactiveText)
     }
 
     private fun saveScreenshotBitmapToGallery(bitmap: android.graphics.Bitmap) {

@@ -176,6 +176,7 @@ class ExternalActivity : AppCompatActivity() {
         loadListsFromPreferences()
         updateDesktopSupportCard()
         applyPlayStoreAppRestrictions()
+        applyDesktopIconSize()
         sortAndRefreshAppLists()
         if (!isPipMode) {
             applyBackgroundTheme()
@@ -298,6 +299,10 @@ class ExternalActivity : AppCompatActivity() {
             cvContextMenu.visibility = View.GONE
             returnToDesktop()
         }
+        findViewById<View>(R.id.tvContextIconSize)?.setOnClickListener {
+            cycleDesktopIconSize()
+            cvContextMenu.visibility = View.GONE
+        }
     }
 
     private fun toggleStartMenu() {
@@ -373,6 +378,7 @@ class ExternalActivity : AppCompatActivity() {
         )
         rvDesktopIcons.layoutManager = GridLayoutManager(this, 5, RecyclerView.HORIZONTAL, false)
         rvDesktopIcons.adapter = desktopAdapter
+        applyDesktopIconSize()
 
         // 2. Taskbar Pinned Apps Adapter (Horizontal)
         taskbarAdapter = TaskbarAppsAdapter(
@@ -937,11 +943,45 @@ class ExternalActivity : AppCompatActivity() {
         }
     }
 
+    private fun applyDesktopIconSize() {
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        val sizeMode = prefs.getString("desktop_icon_size", "small") ?: "small"
+        val rows = when (sizeMode) {
+            "large" -> 3
+            "medium" -> 4
+            else -> 5
+        }
+        (rvDesktopIcons.layoutManager as? GridLayoutManager)?.spanCount = rows
+        if (::desktopAdapter.isInitialized) {
+            desktopAdapter.setIconSizeMode(sizeMode)
+        }
+        val label = when (sizeMode) {
+            "large" -> "⊞ Icons: Large"
+            "medium" -> "⊞ Icons: Medium"
+            else -> "⊞ Icons: Small"
+        }
+        findViewById<TextView>(R.id.tvContextIconSize)?.text = label
+    }
+
+    private fun cycleDesktopIconSize() {
+        val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
+        val current = prefs.getString("desktop_icon_size", "small") ?: "small"
+        val next = when (current) {
+            "small" -> "medium"
+            "medium" -> "large"
+            else -> "small"
+        }
+        prefs.edit().putString("desktop_icon_size", next).apply()
+        applyDesktopIconSize()
+    }
+
     private fun setupSharedPreferencesListener() {
         val prefs = getSharedPreferences("XternalControlPrefs", Context.MODE_PRIVATE)
         sharedPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key?.startsWith("glasses_bg_") == true || key?.startsWith("wallpaper_") == true) {
                 applyBackgroundTheme()
+            } else if (key == "desktop_icon_size") {
+                applyDesktopIconSize()
             } else if ((key == "favourite_packages" || key == "recent_packages") && draggingViewHolder == null) {
                 loadListsFromPreferences()
                 sortAndRefreshAppLists()

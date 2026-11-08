@@ -1,5 +1,6 @@
 package com.xternal.control
 
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,6 +15,7 @@ class DesktopIconsAdapter(
 ) : RecyclerView.Adapter<DesktopIconsAdapter.ViewHolder>() {
 
     private var appList: MutableList<AppInfo> = apps.toMutableList()
+    private var iconSizeMode: String = "small"
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val ivDesktopIcon: ImageView = view.findViewById(R.id.ivDesktopIcon)
@@ -27,6 +29,24 @@ class DesktopIconsAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val app = appList[position]
+        val density = holder.itemView.resources.displayMetrics.density
+
+        val (cellWidthDp, cellHeightDp, iconSizeDp, textSizeSp) = when (iconSizeMode) {
+            "large" -> arrayOf(98, 106, 60, 12)
+            "medium" -> arrayOf(82, 88, 48, 11)
+            else -> arrayOf(66, 72, 36, 10)
+        }
+
+        holder.itemView.layoutParams = holder.itemView.layoutParams?.apply {
+            width = (cellWidthDp * density).toInt()
+            height = (cellHeightDp * density).toInt()
+        }
+        holder.ivDesktopIcon.layoutParams = holder.ivDesktopIcon.layoutParams?.apply {
+            width = (iconSizeDp * density).toInt()
+            height = (iconSizeDp * density).toInt()
+        }
+        holder.tvDesktopAppName.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (iconSizeMode == "small") 9.5f else textSizeSp.toFloat())
+
         holder.tvDesktopAppName.text = app.label
         holder.ivDesktopIcon.setImageDrawable(app.icon)
         if (app.isLocked) {
@@ -53,6 +73,13 @@ class DesktopIconsAdapter(
     }
 
     override fun getItemCount(): Int = appList.size
+
+    fun setIconSizeMode(mode: String) {
+        if (this.iconSizeMode != mode) {
+            this.iconSizeMode = mode
+            notifyDataSetChanged()
+        }
+    }
 
     fun updateData(newApps: List<AppInfo>) {
         this.appList = newApps.toMutableList()

@@ -428,6 +428,61 @@
                                 android:paddingHorizontal="10dp"
                                 app:cornerRadius="6dp"/>
                         </LinearLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="DESKTOP ICON SIZE"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.05"/>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="6dp">
+
+                            <Button
+                                android:id="@+id/btnIconSizeSmall"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:text="SMALL"
+                                android:textSize="10sp"
+                                android:backgroundTint="@color/neon_cyan"
+                                android:textColor="@color/text_dark"
+                                android:paddingHorizontal="6dp"
+                                app:cornerRadius="6dp"/>
+
+                            <Button
+                                android:id="@+id/btnIconSizeMedium"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:layout_marginStart="6dp"
+                                android:text="MEDIUM"
+                                android:textSize="10sp"
+                                android:backgroundTint="@color/bg_card"
+                                android:textColor="@color/text_secondary"
+                                android:paddingHorizontal="6dp"
+                                app:cornerRadius="6dp"/>
+
+                            <Button
+                                android:id="@+id/btnIconSizeLarge"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:layout_marginStart="6dp"
+                                android:text="LARGE"
+                                android:textSize="10sp"
+                                android:backgroundTint="@color/bg_card"
+                                android:textColor="@color/text_secondary"
+                                android:paddingHorizontal="6dp"
+                                app:cornerRadius="6dp"/>
+                        </LinearLayout>
                     </LinearLayout>
                 </androidx.cardview.widget.CardView>
 
