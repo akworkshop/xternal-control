@@ -41,6 +41,13 @@ class PlaystoreTrialManager(private val context: Context) {
     companion object {
         const val TRIAL_DURATION_MS = 2 * 24 * 60 * 60 * 1000L // 48 Hours
 
+        // Current trial epoch. Bump this integer whenever you want to manually trigger
+        // a 48-hour free trial reset on any release (e.g., v1.5.2 = Epoch 2).
+        private const val CURRENT_TRIAL_EPOCH = 2
+
+        private const val KEY_TRIAL_EPOCH = "play_trial_epoch"
+        private const val KEY_LAST_TRIAL_MAJOR_MINOR = "play_last_trial_major_minor"
+        private const val KEY_TRIAL_EPOCH_RESET_TIME = "play_trial_epoch_reset_time"
         private const val KEY_TRIAL_START = "play_trial_start_time"
         private const val KEY_TRIAL_LAST_SEEN = "play_trial_last_seen_time"
         private const val KEY_TRIAL_EXPIRED_SHOWN = "play_trial_expired_dialog_shown"
@@ -61,6 +68,50 @@ class PlaystoreTrialManager(private val context: Context) {
         initInstallReferrer()
         cleanupDuplicateFiles()
         checkNetworkTimeAsync()
+    }
+
+    private fun getMajorMinorVersion(): String {
+        return try {
+            val versionName = com.xternal.control.BuildConfig.VERSION_NAME
+            val clean = versionName.substringBefore("-").trim()
+            val parts = clean.split(".")
+            if (parts.size >= 2) "${parts[0]}.${parts[1]}" else clean
+        } catch (_: Exception) {
+            "1.5"
+        }
+    }
+
+    private fun isNewerMajorMinor(current: String, saved: String): Boolean {
+        return try {
+            val cParts = current.split(".").map { it.toIntOrNull() ?: 0 }
+            val sParts = saved.split(".").map { it.toIntOrNull() ?: 0 }
+            if (cParts.size >= 2 && sParts.size >= 2) {
+                if (cParts[0] > sParts[0]) true
+                else cParts[0] == sParts[0] && cParts[1] > sParts[1]
+            } else false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun resetTrialForNewRelease(now: Long) {
+        val currentMajorMinor = getMajorMinorVersion()
+        Log.i(tag, "Granting fresh 48-hour free trial for release! (Epoch: $CURRENT_TRIAL_EPOCH, Version: $currentMajorMinor)")
+        isTampered = false
+        trialStartTime = now
+        lastRecordedTime = now
+
+        prefs.edit()
+            .putInt(KEY_TRIAL_EPOCH, CURRENT_TRIAL_EPOCH)
+            .putString(KEY_LAST_TRIAL_MAJOR_MINOR, currentMajorMinor)
+            .putLong(KEY_TRIAL_EPOCH_RESET_TIME, now)
+            .putLong(KEY_TRIAL_START, now)
+            .putLong(KEY_TRIAL_LAST_SEEN, now)
+            .putBoolean(KEY_TRIAL_TAMPERED, false)
+            .putBoolean(KEY_TRIAL_EXPIRED_SHOWN, false)
+            .apply()
+
+        writeAllPersistentTrialTokens(now, now)
     }
 
     private fun getDeviceId(): String {
@@ -87,12 +138,36 @@ class PlaystoreTrialManager(private val context: Context) {
 
     @Synchronized
     private fun loadOrInitializeTrial() {
+        val now = System.currentTimeMillis()
+        val currentEpoch = prefs.getInt(KEY_TRIAL_EPOCH, 1)
+        val currentMajorMinor = getMajorMinorVersion()
+        val savedMajorMinor = prefs.getString(KEY_LAST_TRIAL_MAJOR_MINOR, "") ?: ""
+
+        // Check if a trial reset should be granted:
+        // 1. Explicit epoch bump (e.g. v1.5.2 = Epoch 2)
+        // 2. Automatic major/minor version change (e.g. 1.5 -> 1.6, 2.0)
+        val shouldResetEpoch = CURRENT_TRIAL_EPOCH > currentEpoch
+        val shouldResetMajorMinor = savedMajorMinor.isNotEmpty() && isNewerMajorMinor(currentMajorMinor, savedMajorMinor)
+
+        if (shouldResetEpoch || shouldResetMajorMinor) {
+            resetTrialForNewRelease(now)
+            return
+        }
+
+        // Ensure current epoch and version are recorded on first install
+        if (!prefs.contains(KEY_TRIAL_EPOCH)) {
+            prefs.edit()
+                .putInt(KEY_TRIAL_EPOCH, CURRENT_TRIAL_EPOCH)
+                .putString(KEY_LAST_TRIAL_MAJOR_MINOR, currentMajorMinor)
+                .apply()
+        }
+
         if (prefs.getBoolean(KEY_TRIAL_TAMPERED, false)) {
             isTampered = true
             return
         }
 
-        val now = System.currentTimeMillis()
+        val epochResetTime = prefs.getLong(KEY_TRIAL_EPOCH_RESET_TIME, 0L)
 
         // 1. Read from SharedPreferences
         val localStart = prefs.getLong(KEY_TRIAL_START, 0L)
@@ -117,16 +192,20 @@ class PlaystoreTrialManager(private val context: Context) {
             allLastSeens.add(token.second)
         }
 
+        // If a trial reset was previously granted at epochResetTime, ignore tokens from before the reset
+        if (epochResetTime > 0L) {
+            allStarts.removeAll { it < epochResetTime }
+        }
+
         if (allStarts.isNotEmpty()) {
-            // The earliest start time ever recorded across any storage layer wins
             finalStart = allStarts.minOrNull() ?: now
             finalLastSeen = allLastSeens.maxOrNull() ?: now
             Log.d(tag, "Recovered trial state: start=$finalStart, lastSeen=$finalLastSeen (from ${allStarts.size} records)")
         } else {
-            // First install ever
+            // First install or fresh reset
             finalStart = now
             finalLastSeen = now
-            Log.d(tag, "First run: initializing 48h trial at $finalStart")
+            Log.d(tag, "Initializing 48h trial at $finalStart")
         }
 
         // 3. Anti-Clock-Tampering Check
@@ -524,7 +603,18 @@ class PlaystoreTrialManager(private val context: Context) {
 
     private fun onInstallReferrerResolved(installMs: Long) {
         val now = System.currentTimeMillis()
-        Log.d(tag, "Google Play install referrer timestamp resolved: $installMs (current: $now)")
+        val epochResetTime = prefs.getLong(KEY_TRIAL_EPOCH_RESET_TIME, 0L)
+        Log.d(tag, "Google Play install referrer timestamp resolved: $installMs (resetTime=$epochResetTime, current: $now)")
+
+        // If a trial reset was granted on update, don't let an older original install timestamp expire the trial!
+        if (epochResetTime > 0L && installMs < epochResetTime) {
+            Log.d(tag, "Trial was reset at $epochResetTime; skipping older install referrer timestamp ($installMs).")
+            if (now - trialStartTime >= TRIAL_DURATION_MS) {
+                prefs.edit().putLong(KEY_TRIAL_LAST_SEEN, now).apply()
+                writeAllPersistentTrialTokens(trialStartTime, now)
+            }
+            return
+        }
 
         // If local trialStartTime was freshly initialized after data clear, or is greater than installMs:
         if (trialStartTime <= 0L || installMs < trialStartTime) {
