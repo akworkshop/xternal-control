@@ -42,8 +42,8 @@ class PlaystoreTrialManager(private val context: Context) {
         const val TRIAL_DURATION_MS = 2 * 24 * 60 * 60 * 1000L // 48 Hours
 
         // Current trial epoch. Bump this integer whenever you want to manually trigger
-        // a 48-hour free trial reset on any release (e.g., v1.5.2 = Epoch 2).
-        private const val CURRENT_TRIAL_EPOCH = 2
+        // a 48-hour free trial reset on any release (e.g., v1.5.3 = Epoch 3).
+        private const val CURRENT_TRIAL_EPOCH = 3
 
         private const val KEY_TRIAL_EPOCH = "play_trial_epoch"
         private const val KEY_LAST_TRIAL_MAJOR_MINOR = "play_last_trial_major_minor"
@@ -53,9 +53,9 @@ class PlaystoreTrialManager(private val context: Context) {
         private const val KEY_TRIAL_EXPIRED_SHOWN = "play_trial_expired_dialog_shown"
         private const val KEY_TRIAL_TAMPERED = "play_trial_is_tampered"
 
-        // Public persistent filenames (valid in MediaStore - NO leading dots!)
-        private const val FILE_NAME_DOWNLOAD = "xt_license_v1.bin"
-        private const val FILE_NAME_DOCUMENTS = "xt_device_state.bin"
+        // Public persistent filenames (versioned so MediaStore won't treat existing v1 files as duplicates)
+        private const val FILE_NAME_DOWNLOAD = "xt_license_v2.bin"
+        private const val FILE_NAME_DOCUMENTS = "xt_device_state_v2.bin"
 
         private const val SUBDIR_HIDDEN = ".xternal"
         private const val SUBDIR_DISCREET = "xternal"
@@ -109,7 +109,7 @@ class PlaystoreTrialManager(private val context: Context) {
             .putLong(KEY_TRIAL_LAST_SEEN, now)
             .putBoolean(KEY_TRIAL_TAMPERED, false)
             .putBoolean(KEY_TRIAL_EXPIRED_SHOWN, false)
-            .apply()
+            .commit()
 
         writeAllPersistentTrialTokens(now, now)
     }
@@ -144,13 +144,27 @@ class PlaystoreTrialManager(private val context: Context) {
         val savedMajorMinor = prefs.getString(KEY_LAST_TRIAL_MAJOR_MINOR, "") ?: ""
 
         // Check if a trial reset should be granted:
-        // 1. Explicit epoch bump (e.g. v1.5.2 = Epoch 2)
+        // 1. Explicit epoch bump (e.g. v1.5.3 = Epoch 3)
         // 2. Automatic major/minor version change (e.g. 1.5 -> 1.6, 2.0)
         val shouldResetEpoch = CURRENT_TRIAL_EPOCH > currentEpoch
         val shouldResetMajorMinor = savedMajorMinor.isNotEmpty() && isNewerMajorMinor(currentMajorMinor, savedMajorMinor)
 
         if (shouldResetEpoch || shouldResetMajorMinor) {
             resetTrialForNewRelease(now)
+            return
+        }
+
+        // If user is within an active reset epoch, protect and guarantee the trial!
+        val epochResetTime = prefs.getLong(KEY_TRIAL_EPOCH_RESET_TIME, 0L)
+        if (epochResetTime > 0L && (now - epochResetTime) in 0 until TRIAL_DURATION_MS) {
+            isTampered = false
+            trialStartTime = epochResetTime
+            lastRecordedTime = maxOf(now, lastRecordedTime)
+            prefs.edit()
+                .putLong(KEY_TRIAL_START, trialStartTime)
+                .putLong(KEY_TRIAL_LAST_SEEN, lastRecordedTime)
+                .putBoolean(KEY_TRIAL_TAMPERED, false)
+                .apply()
             return
         }
 
@@ -166,8 +180,6 @@ class PlaystoreTrialManager(private val context: Context) {
             isTampered = true
             return
         }
-
-        val epochResetTime = prefs.getLong(KEY_TRIAL_EPOCH_RESET_TIME, 0L)
 
         // 1. Read from SharedPreferences
         val localStart = prefs.getLong(KEY_TRIAL_START, 0L)
@@ -231,8 +243,17 @@ class PlaystoreTrialManager(private val context: Context) {
     }
 
     fun isTrialActive(): Boolean {
-        if (isTampered) return false
         val now = System.currentTimeMillis()
+        val epochResetTime = prefs.getLong(KEY_TRIAL_EPOCH_RESET_TIME, 0L)
+        if (epochResetTime > 0L && (now - epochResetTime) in 0 until TRIAL_DURATION_MS) {
+            isTampered = false
+            if (trialStartTime <= 0L || trialStartTime < epochResetTime) {
+                trialStartTime = epochResetTime
+            }
+            return true
+        }
+
+        if (isTampered) return false
         if (trialStartTime <= 0L) return false
 
         // Quick rollback check
@@ -254,15 +275,27 @@ class PlaystoreTrialManager(private val context: Context) {
     }
 
     fun isTrialExpired(): Boolean {
+        val now = System.currentTimeMillis()
+        val epochResetTime = prefs.getLong(KEY_TRIAL_EPOCH_RESET_TIME, 0L)
+        if (epochResetTime > 0L && (now - epochResetTime) in 0 until TRIAL_DURATION_MS) {
+            return false
+        }
+
         if (isTampered) return true
         if (trialStartTime <= 0L) return false
-        val now = System.currentTimeMillis()
         return (now - trialStartTime) >= TRIAL_DURATION_MS || now < lastRecordedTime - 60_000L
     }
 
     fun getTrialHoursRemaining(): Int {
-        if (isTampered || !isTrialActive()) return 0
         val now = System.currentTimeMillis()
+        val epochResetTime = prefs.getLong(KEY_TRIAL_EPOCH_RESET_TIME, 0L)
+        if (epochResetTime > 0L && (now - epochResetTime) in 0 until TRIAL_DURATION_MS) {
+            val remainingMs = TRIAL_DURATION_MS - (now - epochResetTime)
+            val hours = (remainingMs / (1000 * 60 * 60)).toInt()
+            return maxOf(1, minOf(48, hours))
+        }
+
+        if (isTampered || !isTrialActive()) return 0
         val remainingMs = TRIAL_DURATION_MS - (now - trialStartTime)
         val hours = (remainingMs / (1000 * 60 * 60)).toInt()
         return maxOf(0, minOf(48, hours))
@@ -632,9 +665,15 @@ class PlaystoreTrialManager(private val context: Context) {
     }
 
     private fun onPreExistingTrialDetected() {
+        val now = System.currentTimeMillis()
+        val epochResetTime = prefs.getLong(KEY_TRIAL_EPOCH_RESET_TIME, 0L)
+        if (epochResetTime > 0L && (now - epochResetTime) in 0 until TRIAL_DURATION_MS) {
+            Log.i(tag, "Pre-existing trial file detected, but an active trial reset epoch ($epochResetTime) is in effect. Skipping expired enforcement.")
+            return
+        }
         Log.w(tag, "Pre-existing installation detected on device. Enforcing expired trial state.")
         trialStartTime = 1L
-        lastRecordedTime = System.currentTimeMillis()
+        lastRecordedTime = now
         prefs.edit()
             .putLong(KEY_TRIAL_START, trialStartTime)
             .putLong(KEY_TRIAL_LAST_SEEN, lastRecordedTime)
