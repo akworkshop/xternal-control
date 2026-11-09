@@ -341,11 +341,14 @@ class MediaSessionRemoteManager private constructor(private val context: Context
             }
         }
 
-        try {
-            audioManager?.dispatchMediaKeyEvent(down)
-            audioManager?.dispatchMediaKeyEvent(up)
-        } catch (e: Exception) {
-            e.printStackTrace()
+        if (!handled) {
+            try {
+                audioManager?.dispatchMediaKeyEvent(down)
+                audioManager?.dispatchMediaKeyEvent(up)
+                handled = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
 
         return handled
@@ -354,43 +357,24 @@ class MediaSessionRemoteManager private constructor(private val context: Context
     fun togglePlayPause(): Boolean {
         val controller = activeController ?: return sendMediaKeyEvent(null, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
         val state = controller.playbackState?.state
-        val isPlaying = state == PlaybackState.STATE_PLAYING
-        val pkg = controller.packageName ?: ""
-        val actions = controller.playbackState?.actions ?: 0L
+        if (state == null || state == PlaybackState.STATE_NONE) {
+            return sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+        }
+        val isPlaying = state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
 
-        // Known apps that ignore transportControls or only declare ACTION_PLAY_PAUSE
-        val isKeyPreferred = isMediaKeyPreferredApp(pkg) ||
-                (actions != 0L && (actions and (PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE)) == 0L)
-
-        if (isKeyPreferred) {
-            // Priority 1: Direct media button event for Amazon Prime Video / Apple TV
+        try {
+            if (isPlaying) {
+                controller.transportControls.pause()
+                // Idempotent one-way pause fallback (never unpauses if transportControls.pause() already paused)
+                sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PAUSE)
+            } else {
+                controller.transportControls.play()
+                // Idempotent one-way play fallback (never pauses if transportControls.play() already started)
+                sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PLAY)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
             sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-            // Priority 2: Supplementary transportControls attempt
-            try {
-                if (isPlaying) {
-                    controller.transportControls.pause()
-                } else {
-                    controller.transportControls.play()
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        } else {
-            // Standard media apps (Netflix, Disney+, YouTube, Spotify)
-            try {
-                if (isPlaying) {
-                    controller.transportControls.pause()
-                    // Idempotent pause fallback
-                    sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PAUSE)
-                } else {
-                    controller.transportControls.play()
-                    // Idempotent play fallback
-                    sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PLAY)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-            }
         }
         return true
     }
