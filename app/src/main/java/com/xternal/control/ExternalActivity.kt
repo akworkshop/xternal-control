@@ -136,11 +136,9 @@ class ExternalActivity : AppCompatActivity() {
         if (isExhausted) {
             // If an app is running or virtual app is open and time is up, return to desktop and show dialog
             if (cvDailyLimitDialog.visibility != View.VISIBLE) {
-                if (launcherContainer.visibility != View.VISIBLE || virtualAppContainer.visibility == View.VISIBLE) {
-                    showDailyLimitDialog(currentTrackedPackage.ifEmpty { "this app" })
-                    applyPlayStoreAppRestrictions()
-                    sortAndRefreshAppLists()
-                }
+                showDailyLimitDialog(currentTrackedPackage.ifEmpty { "this app" })
+                applyPlayStoreAppRestrictions()
+                sortAndRefreshAppLists()
             }
         }
     }
@@ -209,7 +207,6 @@ class ExternalActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
-        systemTrayHandler.removeCallbacks(systemTrayRunnable)
         InteractionBridge.sendDesktopForegroundState(false)
         super.onPause()
     }
@@ -601,11 +598,20 @@ class ExternalActivity : AppCompatActivity() {
     }
 
     private fun showDailyLimitDialog(packageName: String) {
-        returnToDesktop()
         val app = allApps.find { it.packageName == packageName }
         val label = app?.label ?: packageName
         tvDailyLimitDesc.text = "You have used today's free preview allowance for $label.\n\nFree apps (YouTube, Chrome, Maps, Settings) remain free anytime.\n\nUpgrade to Pro for unlimited lifetime access to all apps!"
         cvDailyLimitDialog.visibility = View.VISIBLE
+        returnToDesktop()
+        // Re-bring ExternalActivity to top of external display stack
+        try {
+            val intent = Intent(this, ExternalActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun launchApp(packageName: String) {

@@ -175,6 +175,44 @@ class MainActivity : AppCompatActivity() {
     private val cursorHideRunnable = Runnable { hideOverlayCursor() }
     private lateinit var pickWallpaperLauncher: ActivityResultLauncher<String>
 
+    // Daily App Preview Timer Tick Handler (Runs on phone controller to monitor external display)
+    private val dailyPreviewHandler = Handler(Looper.getMainLooper())
+    private val dailyPreviewRunnable = object : Runnable {
+        override fun run() {
+            checkDailyAppPreviewLimit()
+            dailyPreviewHandler.postDelayed(this, 1000)
+        }
+    }
+
+    private fun checkDailyAppPreviewLimit() {
+        if (isProActive()) return
+        val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
+        if (isExhausted) {
+            val targetPkg = lastLaunchedExternalPackage
+            if (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(targetPkg)) {
+                // If a restricted app is active on glasses and preview ended, force return to desktop!
+                lastLaunchedExternalPackage = null
+                isDesktopActive = true
+                InteractionBridge.sendHomeRequest()
+                if (externalDisplayId != -1) {
+                    try {
+                        val options = ActivityOptions.makeBasic()
+                        options.launchDisplayId = externalDisplayId
+                        val intent = Intent(this, ExternalActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        }
+                        startActivity(intent, options.toBundle())
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+                showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
+                applyPlayStoreAppRestrictions()
+                sortAndRefreshAppLists()
+            }
+        }
+    }
+
     // Bluetooth Mouse & Trackpad Long-Press States
     private var lastMouseX = 0f
     private var lastMouseY = 0f
@@ -367,6 +405,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        dailyPreviewHandler.post(dailyPreviewRunnable)
         try {
             // Start focusable on resume so the phone display cleanly takes focus from the previous phone app / launcher first
             window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
@@ -2998,6 +3037,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         mediaProgressHandler.removeCallbacks(mediaProgressRunnable)
+        dailyPreviewHandler.removeCallbacks(dailyPreviewRunnable)
         if (::billingManager.isInitialized) {
             billingManager.destroy()
         }
