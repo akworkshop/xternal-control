@@ -120,26 +120,12 @@ class ExternalActivity : AppCompatActivity() {
     private var cursorY = 540f
     private var isPipMode = false
 
-    // System Tray & Preview Timer Tick Handler
+    // System Tray Tick Handler
     private val systemTrayHandler = Handler(Looper.getMainLooper())
     private val systemTrayRunnable = object : Runnable {
         override fun run() {
             updateSystemTrayStatus()
-            checkDailyAppPreviewLimit()
             systemTrayHandler.postDelayed(this, 1000)
-        }
-    }
-
-    private fun checkDailyAppPreviewLimit() {
-        if (isProActive()) return
-        val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
-        if (isExhausted) {
-            // If an app is running or virtual app is open and time is up, return to desktop and show dialog
-            if (cvDailyLimitDialog.visibility != View.VISIBLE) {
-                showDailyLimitDialog(currentTrackedPackage.ifEmpty { "this app" })
-                applyPlayStoreAppRestrictions()
-                sortAndRefreshAppLists()
-            }
         }
     }
 
