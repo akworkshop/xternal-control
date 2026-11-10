@@ -453,6 +453,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun initViews() {
         tvStatusBadge = findViewById(R.id.tvStatusBadge)
+        // TEST ONLY: Long click status badge to reset daily 2-minute trial timer without clearing app data
+        if (com.xternal.control.billing.PlaystoreBillingManager.FORCE_TEST_EXPIRED_TRIAL) {
+            tvStatusBadge.setOnLongClickListener {
+                com.xternal.control.billing.DailyAppPreviewManager.resetForTest(this)
+                applyPlayStoreAppRestrictions()
+                sortAndRefreshAppLists()
+                Toast.makeText(this, "🔄 TEST MODE: Daily 2-Min Preview Timer Reset!", Toast.LENGTH_LONG).show()
+                true
+            }
+        }
         tvConnectionInfo = findViewById(R.id.tvConnectionInfo)
         tvPermOverlay = findViewById(R.id.tvPermOverlay)
         btnGrantOverlay = findViewById(R.id.btnGrantOverlay)
