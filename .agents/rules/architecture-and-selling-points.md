@@ -38,8 +38,8 @@ Xternal Control turns Android devices into productivity powerhouses when tethere
 - Independent media controls overlay on the phone: Play/Pause, Skip Next/Previous, Rewind/Fast Forward 10s, Volume Slider, Mute.
 - Uses `MediaSessionManager.getActiveSessions()` to send transport commands straight to the active media player regardless of display focus.
 
-### 1.6 Ultra-Lightweight (~5MB) Native Codebase
-- Written in clean Kotlin with minimal dependencies:
+### 1.6 Lightweight Native Codebase
+- Written in clean Kotlin with minimal overhead:
   - Jetpack Compose for phone UI.
   - Native Android View / Canvas rendering for high-performance external presentation.
-  - No Flutter, no React Native, no Electron, no Chromium webview overhead.
+  - No bloated web engines or unnecessary heavy dependencies (keep total size lean and well under 100MB).

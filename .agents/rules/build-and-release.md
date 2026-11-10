@@ -53,7 +53,7 @@ When preparing a new release:
    - For major/minor upgrades: update `CURRENT_TRIAL_EPOCH` and `KEY_TRIAL_EPOCH_RESET_TIME`.
    - Token files will automatically shift to the new version (e.g. `xt_license_v2.bin`).
 3. Compile all flavors.
-4. Verify file sizes (~5MB for APKs, ~5.1MB for AAB).
+4. Verify file sizes are normal (compact native binaries, well under 100MB).
 5. Copy to root and `X:\Softwares\`.
 6. Commit and push changes:
    ```powershell

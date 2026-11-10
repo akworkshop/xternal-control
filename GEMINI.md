@@ -1,10 +1,10 @@
 # GEMINI.md - Xternal Control Project Foundation, Selling Points & Engineering Rules
 
 ## 1. Project Overview & Core Selling Points
-**Xternal Control** is an ultra-lightweight Android productivity app (~5MB download) that transforms any Android phone or tablet into a native 16:9 widescreen desktop workspace, universal media controller, and precision multi-touch trackpad when connected to external monitors, TVs, or XR/AR smart glasses (XREAL, Rokid, RayNeo, Viture).
+**Xternal Control** is a lightweight, responsive Android productivity app that transforms any Android phone or tablet into a native 16:9 widescreen desktop workspace, universal media controller, and precision multi-touch trackpad when connected to external monitors, TVs, or XR/AR smart glasses (XREAL, Rokid, RayNeo, Viture).
 
 ### Key Selling Points:
-1. **Ultra-Lightweight Footprint**: Zero bloated web engines, zero heavy frameworks, raw native Android Jetpack Compose + View hierarchy (~5MB download, ~15MB RAM footprint).
+1. **Lightweight & Fast Native Footprint**: Zero bloated web engines, zero heavy Electron/Chromium wrappers, raw native Android Jetpack Compose + View hierarchy. Compact download size (well under 100MB, typically lightweight native binary) with minimal RAM overhead.
 2. **True 16:9 Native Resolution Desktop**: Overrides phone aspect ratio mirroring (which leaves black pillar bars on monitors) using native `ActivityOptions.setLaunchDisplayId()` into secondary presentation workspaces.
 3. **XR / AR Smart Glasses Optimization**:
    - Ultra-low latency cursor pass-through.
