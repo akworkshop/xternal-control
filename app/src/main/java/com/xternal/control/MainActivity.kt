@@ -2647,9 +2647,26 @@ class MainActivity : AppCompatActivity() {
                             isDesktopActive = true
                             com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
                         } else {
-                            isDesktopActive = false
-                            lastLaunchedExternalPackage = pkg
-                            com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
+                            // Check if this newly focused package is restricted and daily allowance is exhausted (e.g. reopened via Task Switcher)
+                            if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(pkg) && com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
+                                isDesktopActive = true
+                                InteractionBridge.sendHomeRequest()
+                                if (externalDisplayId != -1) {
+                                    val options = ActivityOptions.makeBasic()
+                                    options.launchDisplayId = externalDisplayId
+                                    val intent = Intent(this, ExternalActivity::class.java).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                                    }
+                                    startActivity(intent, options.toBundle())
+                                }
+                                showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
+                                applyPlayStoreAppRestrictions()
+                                sortAndRefreshAppLists()
+                            } else {
+                                isDesktopActive = false
+                                lastLaunchedExternalPackage = pkg
+                                com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
+                            }
                         }
                     }
                     updateMediaAppInfo(pkg)
