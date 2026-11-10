@@ -188,6 +188,13 @@ class MainActivity : AppCompatActivity() {
         if (isProActive()) return
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
         if (isExhausted) {
+            // Option 1 Workaround: Immediately suppress any running playback on restricted apps
+            if (::mediaRemoteManager.isInitialized) {
+                mediaRemoteManager.forcePauseAllRestrictedSessions { pkg ->
+                    com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(pkg)
+                }
+            }
+
             val targetPkg = lastLaunchedExternalPackage
             if (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(targetPkg)) {
                 // If a restricted app is active on glasses and preview ended, force return to desktop!
@@ -1901,6 +1908,13 @@ class MainActivity : AppCompatActivity() {
         if (::mediaRemoteManager.isInitialized) {
             mediaRemoteManager.onStateChangedListener = { state ->
                 runOnUiThread {
+                    // Workaround: If daily preview is exhausted and a restricted app tries to resume playing, force pause!
+                    if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
+                        val currentMediaPkg = activeMediaPackage
+                        if (state.isPlaying && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(currentMediaPkg)) {
+                            mediaRemoteManager.pause()
+                        }
+                    }
                     applyMediaSessionState(state)
                 }
             }
@@ -2649,6 +2663,9 @@ class MainActivity : AppCompatActivity() {
                         } else {
                             // Check if this newly focused package is restricted and daily allowance is exhausted (e.g. reopened via Task Switcher)
                             if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(pkg) && com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
+                                if (::mediaRemoteManager.isInitialized) {
+                                    mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
+                                }
                                 isDesktopActive = true
                                 InteractionBridge.sendHomeRequest()
                                 if (externalDisplayId != -1) {

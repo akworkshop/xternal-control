@@ -401,6 +401,45 @@ class MediaSessionRemoteManager private constructor(private val context: Context
         return true
     }
 
+    fun pauseActiveRestrictedPlayback(): Boolean {
+        return pause()
+    }
+
+    fun isRestrictedAppPlaying(restrictedPackageCheck: (String) -> Boolean): Boolean {
+        val controller = activeController ?: return false
+        val pkg = controller.packageName ?: ""
+        if (restrictedPackageCheck(pkg)) {
+            val state = controller.playbackState?.state
+            return state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
+        }
+        return false
+    }
+
+    fun forcePauseAllRestrictedSessions(restrictedPackageCheck: (String) -> Boolean) {
+        try {
+            if (!isNotificationAccessGranted() || mediaSessionManager == null) {
+                pause()
+                return
+            }
+            val componentName = MediaNotificationListenerService.getComponentName(context)
+            val controllers = mediaSessionManager.getActiveSessions(componentName)
+            for (controller in controllers) {
+                val pkg = controller.packageName ?: ""
+                if (restrictedPackageCheck(pkg)) {
+                    try {
+                        controller.transportControls.pause()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    sendMediaKeyEvent(controller, KeyEvent.KEYCODE_MEDIA_PAUSE)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            pause()
+        }
+    }
+
     fun seekRelative(deltaMs: Long): Boolean {
         val controller = activeController ?: return false
         val duration = controller.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: -1L

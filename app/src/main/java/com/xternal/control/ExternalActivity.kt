@@ -692,6 +692,10 @@ class ExternalActivity : AppCompatActivity() {
     }
 
     private fun handleBackNavigation(): Boolean {
+        if (cvDailyLimitDialog.visibility == View.VISIBLE) {
+            cvDailyLimitDialog.visibility = View.GONE
+            return true
+        }
         if (cvContextMenu.visibility == View.VISIBLE) {
             cvContextMenu.visibility = View.GONE
             return true
@@ -752,6 +756,12 @@ class ExternalActivity : AppCompatActivity() {
                     viewCursorRipple.scaleY = 1f
                 }
                 .start()
+
+            if (cvDailyLimitDialog.visibility == View.VISIBLE) {
+                if (!isPointInsideView(cursorX, cursorY, cvDailyLimitDialog)) {
+                    cvDailyLimitDialog.visibility = View.GONE
+                }
+            }
 
             if (cvContextMenu.visibility == View.VISIBLE) {
                 if (!isPointInsideView(cursorX, cursorY, cvContextMenu)) {
