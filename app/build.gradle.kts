@@ -32,8 +32,8 @@ android {
         }
         create("playstore") {
             dimension = "distribution"
-            applicationIdSuffix = ".play"
-            versionNameSuffix = "-play"
+            applicationIdSuffix = ".test"
+            versionNameSuffix = "-test"
         }
     }
 

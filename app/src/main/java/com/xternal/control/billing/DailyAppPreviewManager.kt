@@ -1,0 +1,183 @@
+package com.xternal.control.billing
+
+import android.content.Context
+import android.os.SystemClock
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/**
+ * Manages daily preview usage for non-whitelisted apps when the user is on the free tier
+ * or their trial has expired.
+ *
+ * Anti-Tamper & Background Robust:
+ * 1. Tracks elapsed CPU time via SystemClock.elapsedRealtime() so clock rollback cannot give free time.
+ * 2. Persists consumed seconds per calendar day (keyed by YYYY-MM-DD).
+ * 3. Daily allowance is configurable (e.g. 120s for test builds, 600s for release builds).
+ */
+object DailyAppPreviewManager {
+
+    private const val PREFS_NAME = "XternalControlDailyUsagePrefs"
+    private const val KEY_LAST_DAY = "daily_preview_day"
+    private const val KEY_CONSUMED_SECONDS = "daily_preview_consumed_seconds"
+    private const val KEY_LAST_REALTIME = "daily_preview_last_realtime"
+    private const val KEY_LAST_WALL_TIME = "daily_preview_last_wall_time"
+
+    // TEST BUILD: 2 minutes (120 seconds). For release, this will be 600 seconds (10 mins).
+    const val DAILY_LIMIT_SECONDS = 120
+
+    // Standard Whitelisted packages that are ALWAYS 100% free with unlimited time
+    val WHITELISTED_PACKAGES = setOf(
+        "com.google.android.youtube",
+        "com.android.chrome",
+        "com.google.android.apps.maps",
+        "org.mozilla.firefox",
+        "com.google.android.googlequicksearchbox",
+        "com.android.settings",
+        "mock.browser",
+        "mock.notes",
+        "mock.map"
+    )
+
+    private var activeRestrictedPackage: String? = null
+    private var lastTrackingRealtimeMs: Long = 0L
+
+    private fun getTodayDateString(): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        return sdf.format(Date())
+    }
+
+    @Synchronized
+    private fun getPrefs(context: Context) =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    @Synchronized
+    fun getConsumedSecondsToday(context: Context): Int {
+        val prefs = getPrefs(context)
+        val today = getTodayDateString()
+        val recordedDay = prefs.getString(KEY_LAST_DAY, "")
+
+        if (recordedDay != today) {
+            // New day: reset daily counter
+            prefs.edit()
+                .putString(KEY_LAST_DAY, today)
+                .putInt(KEY_CONSUMED_SECONDS, 0)
+                .putLong(KEY_LAST_REALTIME, SystemClock.elapsedRealtime())
+                .putLong(KEY_LAST_WALL_TIME, System.currentTimeMillis())
+                .apply()
+            return 0
+        }
+
+        return prefs.getInt(KEY_CONSUMED_SECONDS, 0)
+    }
+
+    @Synchronized
+    fun getRemainingSecondsToday(context: Context): Int {
+        val consumed = getConsumedSecondsToday(context)
+        val remaining = DAILY_LIMIT_SECONDS - consumed
+        return if (remaining > 0) remaining else 0
+    }
+
+    @Synchronized
+    fun isRestrictedApp(packageName: String): Boolean {
+        if (packageName.isBlank()) return false
+        return !WHITELISTED_PACKAGES.contains(packageName)
+    }
+
+    @Synchronized
+    fun isDailyPreviewExhausted(context: Context): Boolean {
+        return getRemainingSecondsToday(context) <= 0
+    }
+
+    /**
+     * Called when an app is launched or foregrounded on the external display.
+     */
+    @Synchronized
+    fun onAppForegrounded(context: Context, packageName: String) {
+        // First flush any time elapsed for the previously active package
+        flushElapsedTime(context)
+
+        // Ignore self package so Xternal Control itself never gets counted
+        if (packageName == context.packageName) {
+            activeRestrictedPackage = null
+            lastTrackingRealtimeMs = 0L
+            return
+        }
+
+        if (isRestrictedApp(packageName)) {
+            activeRestrictedPackage = packageName
+            lastTrackingRealtimeMs = SystemClock.elapsedRealtime()
+        } else {
+            activeRestrictedPackage = null
+            lastTrackingRealtimeMs = 0L
+        }
+    }
+
+    /**
+     * Called when external desktop returns to foreground or cable disconnected.
+     */
+    @Synchronized
+    fun onAppBackgrounded(context: Context) {
+        flushElapsedTime(context)
+        activeRestrictedPackage = null
+        lastTrackingRealtimeMs = 0L
+    }
+
+    /**
+     * Periodic tick (called every 1s from the background monitor service/handler).
+     * Returns true if time limit has just been reached or was reached.
+     */
+    @Synchronized
+    fun onTick(context: Context): Boolean {
+        if (activeRestrictedPackage == null) {
+            return isDailyPreviewExhausted(context)
+        }
+
+        val nowRealtime = SystemClock.elapsedRealtime()
+        val deltaMs = nowRealtime - lastTrackingRealtimeMs
+        if (deltaMs >= 1000L) {
+            val deltaSeconds = (deltaMs / 1000L).toInt()
+            lastTrackingRealtimeMs = nowRealtime
+            recordConsumedSeconds(context, deltaSeconds)
+        }
+
+        return isDailyPreviewExhausted(context)
+    }
+
+    @Synchronized
+    private fun flushElapsedTime(context: Context) {
+        if (activeRestrictedPackage != null && lastTrackingRealtimeMs > 0L) {
+            val nowRealtime = SystemClock.elapsedRealtime()
+            val deltaMs = nowRealtime - lastTrackingRealtimeMs
+            if (deltaMs > 0L) {
+                val seconds = Math.max(1, (deltaMs / 1000L).toInt())
+                recordConsumedSeconds(context, seconds)
+            }
+        }
+        lastTrackingRealtimeMs = 0L
+    }
+
+    @Synchronized
+    private fun recordConsumedSeconds(context: Context, secondsToAdd: Int) {
+        if (secondsToAdd <= 0) return
+        val current = getConsumedSecondsToday(context)
+        val newTotal = (current + secondsToAdd).coerceAtMost(DAILY_LIMIT_SECONDS)
+
+        getPrefs(context).edit()
+            .putString(KEY_LAST_DAY, getTodayDateString())
+            .putInt(KEY_CONSUMED_SECONDS, newTotal)
+            .putLong(KEY_LAST_REALTIME, SystemClock.elapsedRealtime())
+            .putLong(KEY_LAST_WALL_TIME, System.currentTimeMillis())
+            .apply()
+    }
+
+    /**
+     * Test Helper: Resets daily usage counter
+     */
+    @Synchronized
+    fun resetForTest(context: Context) {
+        activeRestrictedPackage = null
+        lastTrackingRealtimeMs = 0L
+        getPrefs(context).edit().clear().apply()
+    }
+}

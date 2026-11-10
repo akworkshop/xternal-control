@@ -1204,9 +1204,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun launchAppOnGlasses(packageName: String) {
         val app = allApps.find { it.packageName == packageName }
-        if (app != null && app.isLocked) {
-            showProUpgradeDialog()
-            return
+        if (!isProActive()) {
+            val isRestricted = com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(packageName)
+            if (isRestricted) {
+                if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
+                    showProUpgradeDialog("You have used today's free preview allowance for ${app?.label ?: packageName}.\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
+                    return
+                } else {
+                    val remainingSecs = com.xternal.control.billing.DailyAppPreviewManager.getRemainingSecondsToday(this)
+                    val mins = (remainingSecs + 59) / 60
+                    Toast.makeText(this, "Daily Free Preview: ~$mins min remaining today", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
         isDesktopActive = false
         lastLaunchedExternalPackage = packageName
@@ -2396,8 +2405,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)
         for (app in allApps) {
-            app.isLocked = !allowedPackages.contains(app.packageName)
+            val isRestricted = !allowedPackages.contains(app.packageName)
+            // If user still has daily preview minutes left, allow launching without padlock
+            app.isLocked = isRestricted && isExhausted
         }
     }
 
@@ -2594,9 +2606,11 @@ class MainActivity : AppCompatActivity() {
                         val isSystemLauncher = pkg.contains("launcher") || pkg.contains("home")
                         if (isSystemLauncher) {
                             isDesktopActive = true
+                            com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
                         } else {
                             isDesktopActive = false
                             lastLaunchedExternalPackage = pkg
+                            com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
                         }
                     }
                     updateMediaAppInfo(pkg)
@@ -2613,6 +2627,9 @@ class MainActivity : AppCompatActivity() {
             try {
                 isDesktopActive = isForeground
                 if (isForeground) {
+                    com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
+                    applyPlayStoreAppRestrictions()
+                    sortAndRefreshAppLists()
                     activeMediaPackage = packageName
                     if (::mediaRemoteManager.isInitialized) {
                         mediaRemoteManager.foregroundPackage = ""

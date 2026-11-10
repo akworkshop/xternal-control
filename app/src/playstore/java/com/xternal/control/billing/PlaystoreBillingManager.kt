@@ -136,18 +136,26 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
     }
 
     fun isPurchasedPro(): Boolean {
+        // Test flag: When FORCE_TEST_EXPIRED_TRIAL is true, simulate non-pro expired user
+        if (FORCE_TEST_EXPIRED_TRIAL) return false
         return prefs.getBoolean(BillingManager.KEY_IS_PRO, false)
     }
 
     override fun isProActive(): Boolean {
+        if (FORCE_TEST_EXPIRED_TRIAL) return false
         return isPurchasedPro() || trialManager.isTrialActive()
     }
 
-    override fun isTrialActive(): Boolean = !isPurchasedPro() && trialManager.isTrialActive()
-    override fun isTrialExpired(): Boolean = !isPurchasedPro() && trialManager.isTrialExpired()
-    override fun getTrialHoursRemaining(): Int = if (isPurchasedPro()) 0 else trialManager.getTrialHoursRemaining()
+    override fun isTrialActive(): Boolean = if (FORCE_TEST_EXPIRED_TRIAL) false else (!isPurchasedPro() && trialManager.isTrialActive())
+    override fun isTrialExpired(): Boolean = if (FORCE_TEST_EXPIRED_TRIAL) true else (!isPurchasedPro() && trialManager.isTrialExpired())
+    override fun getTrialHoursRemaining(): Int = if (FORCE_TEST_EXPIRED_TRIAL || isPurchasedPro()) 0 else trialManager.getTrialHoursRemaining()
     override fun shouldShowTrialExpiredDialog(): Boolean = !isPurchasedPro() && trialManager.shouldShowTrialExpiredDialog()
     override fun markTrialExpiredDialogShown() = trialManager.markTrialExpiredDialogShown()
+
+    companion object {
+        // Set to true for test build to experience expired trial behavior
+        const val FORCE_TEST_EXPIRED_TRIAL = true
+    }
 
     override fun purchasePro(activity: Activity) {
         val cachedDetails = proProductDetails

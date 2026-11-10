@@ -30,6 +30,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -99,6 +100,12 @@ class ExternalActivity : AppCompatActivity() {
     private lateinit var viewCursorRipple: View
     private lateinit var cvContextMenu: CardView
 
+    // Daily Preview Limit Dialog
+    private lateinit var cvDailyLimitDialog: CardView
+    private lateinit var tvDailyLimitDesc: TextView
+    private lateinit var btnDailyLimitClose: Button
+    private lateinit var btnDailyLimitUpgrade: Button
+
     // Data Lists
     private var allApps: List<AppInfo> = ArrayList()
     private var recentPackages: ArrayList<String> = ArrayList()
@@ -113,14 +120,32 @@ class ExternalActivity : AppCompatActivity() {
     private var cursorY = 540f
     private var isPipMode = false
 
-    // System Tray Tick Handler
+    // System Tray & Preview Timer Tick Handler
     private val systemTrayHandler = Handler(Looper.getMainLooper())
     private val systemTrayRunnable = object : Runnable {
         override fun run() {
             updateSystemTrayStatus()
+            checkDailyAppPreviewLimit()
             systemTrayHandler.postDelayed(this, 1000)
         }
     }
+
+    private fun checkDailyAppPreviewLimit() {
+        if (isProActive()) return
+        val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
+        if (isExhausted) {
+            // If an app is running or virtual app is open and time is up, return to desktop and show dialog
+            if (cvDailyLimitDialog.visibility != View.VISIBLE) {
+                if (launcherContainer.visibility != View.VISIBLE || virtualAppContainer.visibility == View.VISIBLE) {
+                    showDailyLimitDialog(currentTrackedPackage.ifEmpty { "this app" })
+                    applyPlayStoreAppRestrictions()
+                    sortAndRefreshAppLists()
+                }
+            }
+        }
+    }
+
+    private var currentTrackedPackage: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -250,6 +275,32 @@ class ExternalActivity : AppCompatActivity() {
 
         viewCursorRipple = findViewById(R.id.viewCursorRipple)
         cvContextMenu = findViewById(R.id.cvContextMenu)
+
+        // Daily Limit Dialog
+        cvDailyLimitDialog = findViewById(R.id.cvDailyLimitDialog)
+        tvDailyLimitDesc = findViewById(R.id.tvDailyLimitDesc)
+        btnDailyLimitClose = findViewById(R.id.btnDailyLimitClose)
+        btnDailyLimitUpgrade = findViewById(R.id.btnDailyLimitUpgrade)
+
+        btnDailyLimitClose.setOnClickListener {
+            cvDailyLimitDialog.visibility = View.GONE
+            returnToDesktop()
+        }
+
+        btnDailyLimitUpgrade.setOnClickListener {
+            cvDailyLimitDialog.visibility = View.GONE
+            returnToDesktop()
+            try {
+                val intent = Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra("EXTRA_TRIGGER_PURCHASE", true)
+                }
+                startActivity(intent)
+                Toast.makeText(this, "Complete Pro upgrade on your phone screen", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
 
         // Capture display dimensions once loaded & detect real hardware resolution
         rootContainer.post {
@@ -488,8 +539,11 @@ class ExternalActivity : AppCompatActivity() {
             }
         }
 
+        val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)
         for (app in allApps) {
-            app.isLocked = !allowedPackages.contains(app.packageName)
+            val isRestricted = !allowedPackages.contains(app.packageName)
+            // If user still has daily preview minutes left, don't hard-lock the app icons
+            app.isLocked = isRestricted && isExhausted
         }
     }
 
@@ -546,16 +600,30 @@ class ExternalActivity : AppCompatActivity() {
         sortAndRefreshAppLists()
     }
 
+    private fun showDailyLimitDialog(packageName: String) {
+        returnToDesktop()
+        val app = allApps.find { it.packageName == packageName }
+        val label = app?.label ?: packageName
+        tvDailyLimitDesc.text = "You have used today's free preview allowance for $label.\n\nFree apps (YouTube, Chrome, Maps, Settings) remain free anytime.\n\nUpgrade to Pro for unlimited lifetime access to all apps!"
+        cvDailyLimitDialog.visibility = View.VISIBLE
+    }
+
     private fun launchApp(packageName: String) {
         layoutStartMenu.visibility = View.GONE
         InteractionBridge.sendDesktopForegroundState(false)
         InteractionBridge.sendAppLaunchedFromExternal(packageName)
 
         if (!isProActive()) {
-            val targetApp = allApps.find { it.packageName == packageName }
-            if (targetApp != null && targetApp.isLocked) {
-                Toast.makeText(this, "App locked in Free version. Upgrade to Pro on your phone!", Toast.LENGTH_LONG).show()
-                return
+            val isRestricted = com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(packageName)
+            if (isRestricted) {
+                if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
+                    showDailyLimitDialog(packageName)
+                    return
+                } else {
+                    val remainingSecs = com.xternal.control.billing.DailyAppPreviewManager.getRemainingSecondsToday(this)
+                    val mins = (remainingSecs + 59) / 60
+                    Toast.makeText(this, "Daily Free Preview: ~$mins min remaining today", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -563,6 +631,9 @@ class ExternalActivity : AppCompatActivity() {
         recentPackages.add(0, packageName)
         saveListsToPreferences()
         sortAndRefreshAppLists()
+
+        currentTrackedPackage = packageName
+        com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, packageName)
 
         when (packageName) {
             "mock.browser" -> {
@@ -647,6 +718,11 @@ class ExternalActivity : AppCompatActivity() {
         applyBackgroundTheme()
         InteractionBridge.sendPipStateChanged(false)
         InteractionBridge.sendForegroundPackageChanged(packageName)
+
+        currentTrackedPackage = ""
+        com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
+        applyPlayStoreAppRestrictions()
+        sortAndRefreshAppLists()
     }
 
     private fun setupInteractionBridge() {
