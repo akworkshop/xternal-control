@@ -42,8 +42,45 @@ object DailyAppPreviewManager {
         "mock.map"
     )
 
+    // Critical Android System & Keyboard packages that MUST NEVER be restricted
+    // (Prevents Google Play purchase screen, notification shade, and soft keyboards from being locked)
+    val SYSTEM_PACKAGES = setOf(
+        "com.android.vending",
+        "com.google.android.feedback",
+        "com.android.systemui",
+        "com.google.android.packageinstaller",
+        "com.android.permissioncontroller",
+        "com.google.android.permissioncontroller",
+        "com.google.android.inputmethod.latin",
+        "com.samsung.android.honeyboard",
+        "com.touchtype.swiftkey",
+        "com.baidu.input"
+    )
+
+    // Set of all restricted packages that were launched or active on the external display this session
+    val activeExternalRestrictedPackages = mutableSetOf<String>()
+
     private var activeRestrictedPackage: String? = null
     private var lastTrackingRealtimeMs: Long = 0L
+
+    @Synchronized
+    fun registerExternalApp(packageName: String) {
+        if (isRestrictedApp(packageName)) {
+            activeExternalRestrictedPackages.add(packageName)
+        }
+    }
+
+    @Synchronized
+    fun isPackageInExternalRestrictedSet(packageName: String): Boolean {
+        return activeExternalRestrictedPackages.contains(packageName)
+    }
+
+    @Synchronized
+    fun clearExternalSession() {
+        activeExternalRestrictedPackages.clear()
+        activeRestrictedPackage = null
+        lastTrackingRealtimeMs = 0L
+    }
 
     private fun getTodayDateString(): String {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -61,7 +98,22 @@ object DailyAppPreviewManager {
         val recordedDay = prefs.getString(KEY_LAST_DAY, "")
 
         if (recordedDay != today) {
-            // New day: reset daily counter
+            val lastRealtime = prefs.getLong(KEY_LAST_REALTIME, 0L)
+            val nowRealtime = SystemClock.elapsedRealtime()
+            val lastWallTime = prefs.getLong(KEY_LAST_WALL_TIME, 0L)
+            val nowWallTime = System.currentTimeMillis()
+
+            // Anti-cheat: If recordedDay was set, verify that CPU uptime makes sense for a day roll
+            if (recordedDay.isNotEmpty()) {
+                val realtimeDeltaMs = nowRealtime - lastRealtime
+                // If user jumped wall time forward without device running, or rolled clock backward:
+                if (nowWallTime < lastWallTime || (realtimeDeltaMs in 0..(2 * 60 * 60 * 1000L) && (nowWallTime - lastWallTime) > 12 * 60 * 60 * 1000L)) {
+                    // Refuse to reset counter
+                    return prefs.getInt(KEY_CONSUMED_SECONDS, DAILY_LIMIT_SECONDS)
+                }
+            }
+
+            // Valid new day: reset daily counter
             prefs.edit()
                 .putString(KEY_LAST_DAY, today)
                 .putInt(KEY_CONSUMED_SECONDS, 0)
@@ -84,6 +136,9 @@ object DailyAppPreviewManager {
     @Synchronized
     fun isRestrictedApp(packageName: String): Boolean {
         if (packageName.isBlank()) return false
+        if (packageName == "android" || packageName.startsWith("com.android.systemui")) return false
+        if (packageName.contains("launcher") || packageName.contains("home")) return false
+        if (SYSTEM_PACKAGES.contains(packageName)) return false
         return !WHITELISTED_PACKAGES.contains(packageName)
     }
 
@@ -109,6 +164,7 @@ object DailyAppPreviewManager {
 
         if (isRestrictedApp(packageName)) {
             activeRestrictedPackage = packageName
+            activeExternalRestrictedPackages.add(packageName)
             lastTrackingRealtimeMs = SystemClock.elapsedRealtime()
         } else {
             activeRestrictedPackage = null
@@ -179,6 +235,7 @@ object DailyAppPreviewManager {
      */
     @Synchronized
     fun resetForTest(context: Context) {
+        activeExternalRestrictedPackages.clear()
         activeRestrictedPackage = null
         lastTrackingRealtimeMs = 0L
         getPrefs(context).edit().clear().apply()

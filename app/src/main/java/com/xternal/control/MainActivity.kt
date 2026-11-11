@@ -1043,6 +1043,7 @@ class MainActivity : AppCompatActivity() {
                 "Glasses display connected: ID $externalDisplayId (${targetDisplay.name})"
             }
             
+            ControllerAccessibilityService.activeExternalDisplayId = externalDisplayId
             // Activate trackpad
             activateTrackpadMode()
             // Switch to APPS tab automatically
@@ -1089,7 +1090,8 @@ class MainActivity : AppCompatActivity() {
             tvStatusBadge.backgroundTintList = null
             tvConnectionInfo.text = "No physical external display found."
             deactivateTrackpadMode()
-            com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
+            ControllerAccessibilityService.activeExternalDisplayId = -1
+            com.xternal.control.billing.DailyAppPreviewManager.clearExternalSession()
         }
     }
     private fun setupDisplayListener() {
@@ -2694,8 +2696,8 @@ class MainActivity : AppCompatActivity() {
                             isDesktopActive = true
                             com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
                         } else {
-                            // Check if this newly focused package is restricted and daily allowance is exhausted (e.g. reopened via Task Switcher)
-                            if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(pkg) && com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
+                            // Check if this newly focused package is in external restricted set and daily allowance is exhausted
+                            if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg) && com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
                                 if (::mediaRemoteManager.isInitialized) {
                                     mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
                                 }

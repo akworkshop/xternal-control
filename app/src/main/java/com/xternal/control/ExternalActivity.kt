@@ -625,6 +625,7 @@ class ExternalActivity : AppCompatActivity() {
         sortAndRefreshAppLists()
 
         currentTrackedPackage = packageName
+        com.xternal.control.billing.DailyAppPreviewManager.registerExternalApp(packageName)
         com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, packageName)
 
         when (packageName) {

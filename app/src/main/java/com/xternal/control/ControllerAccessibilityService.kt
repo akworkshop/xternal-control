@@ -19,6 +19,9 @@ class ControllerAccessibilityService : AccessibilityService() {
         var instance: ControllerAccessibilityService? = null
             private set
 
+        @Volatile
+        var activeExternalDisplayId: Int = -1
+
         // Duration of each continued-stroke segment while a held touch follows the trackpad
         private const val HELD_SEGMENT_MS = 16L
     }
@@ -48,20 +51,60 @@ class ControllerAccessibilityService : AccessibilityService() {
     private var heldTargetY2 = 0f
     private var isDualHeldTouch = false
 
+    private val enforcementHandler = Handler(Looper.getMainLooper())
+    private val enforcementRunnable = object : Runnable {
+        override fun run() {
+            try {
+                enforceDailyLimit()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            enforcementHandler.postDelayed(this, 1000)
+        }
+    }
+
+    private fun enforceDailyLimit() {
+        val extDisplayId = if (activeExternalDisplayId != -1) activeExternalDisplayId else heldDisplayId
+        if (extDisplayId <= 0) return
+        val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
+        if (isExhausted) {
+            val restrictedSet = com.xternal.control.billing.DailyAppPreviewManager.activeExternalRestrictedPackages
+            if (restrictedSet.isNotEmpty()) {
+                com.xternal.control.media.MediaSessionRemoteManager.instance?.forcePauseAllRestrictedSessions { pkg ->
+                    restrictedSet.contains(pkg)
+                }
+                // Also assert ExternalActivity to front if MainActivity was swiped away
+                try {
+                    val options = android.app.ActivityOptions.makeBasic()
+                    options.launchDisplayId = extDisplayId
+                    val intent = Intent(this, ExternalActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    }
+                    startActivity(intent, options.toBundle())
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        enforcementHandler.post(enforcementRunnable)
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
         resetHeldTouch()
+        enforcementHandler.removeCallbacks(enforcementRunnable)
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         instance = null
         resetHeldTouch()
+        enforcementHandler.removeCallbacks(enforcementRunnable)
         super.onDestroy()
     }
 
@@ -69,8 +112,27 @@ class ControllerAccessibilityService : AccessibilityService() {
         if (event == null) return
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val pkg = event.packageName?.toString() ?: return
-            // Ignore self package so phone trackpad/UI events never overwrite external display foreground state
             if (pkg == packageName) return
+
+            // Filter out system packages (Play Store, Keyboards, System UI)
+            if (com.xternal.control.billing.DailyAppPreviewManager.SYSTEM_PACKAGES.contains(pkg)) return
+
+            // On Android 9+ / Android 11+, check display ID of the event
+            val eventDisplayId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                event.displayId
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                event.source?.window?.displayId ?: -1
+            } else {
+                -1
+            }
+
+            val currentExtId = if (activeExternalDisplayId != -1) activeExternalDisplayId else heldDisplayId
+            // If the event was explicitly on the default phone screen (display 0) while external screen is active,
+            // ignore so phone apps (WhatsApp, Gmail, etc.) never interfere with the external desktop shield!
+            if (eventDisplayId == Display.DEFAULT_DISPLAY && currentExtId > 0) {
+                return
+            }
+
             InteractionBridge.sendForegroundPackageChanged(pkg)
         }
     }
