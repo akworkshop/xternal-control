@@ -104,7 +104,7 @@ object DailyAppPreviewManager {
             val nowWallTime = System.currentTimeMillis()
 
             // Anti-cheat: If recordedDay was set, verify that CPU uptime makes sense for a day roll
-            if (recordedDay.isNotEmpty()) {
+            if (!recordedDay.isNullOrEmpty()) {
                 val realtimeDeltaMs = nowRealtime - lastRealtime
                 // If user jumped wall time forward without device running, or rolled clock backward:
                 if (nowWallTime < lastWallTime || (realtimeDeltaMs in 0..(2 * 60 * 60 * 1000L) && (nowWallTime - lastWallTime) > 12 * 60 * 60 * 1000L)) {
