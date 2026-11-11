@@ -184,41 +184,55 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var hasTriggeredExpiryShield = false
+
     private fun checkDailyAppPreviewLimit() {
         // If cable/glasses are disconnected, phone apps are 100% unrestricted
-        if (externalDisplayId == -1) return
+        if (externalDisplayId == -1) {
+            hasTriggeredExpiryShield = false
+            return
+        }
         if (isProActive()) return
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
         if (isExhausted) {
-            // Option 1 Workaround: Immediately suppress any running playback on restricted apps
+            // Immediately suppress any running playback on all restricted external apps
             if (::mediaRemoteManager.isInitialized) {
                 mediaRemoteManager.forcePauseAllRestrictedSessions { pkg ->
-                    com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(pkg)
+                    com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg)
                 }
             }
 
-            val targetPkg = lastLaunchedExternalPackage
-            if (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(targetPkg)) {
-                // If a restricted app is active on glasses and preview ended, force return to desktop!
-                lastLaunchedExternalPackage = null
-                isDesktopActive = true
-                InteractionBridge.sendHomeRequest()
-                if (externalDisplayId != -1) {
-                    try {
-                        val options = ActivityOptions.makeBasic()
-                        options.launchDisplayId = externalDisplayId
-                        val intent = Intent(this, ExternalActivity::class.java).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            // Only trigger the visual shield return ONCE per expiry transition:
+            if (!hasTriggeredExpiryShield) {
+                hasTriggeredExpiryShield = true
+                val targetPkg = lastLaunchedExternalPackage
+                if (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(targetPkg)) {
+                    lastLaunchedExternalPackage = null
+                    isDesktopActive = true
+                    InteractionBridge.sendHomeRequest()
+                    if (externalDisplayId != -1) {
+                        try {
+                            val options = ActivityOptions.makeBasic()
+                            options.launchDisplayId = externalDisplayId
+                            val intent = Intent(this, ExternalActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            }
+                            startActivity(intent, options.toBundle())
+                        } catch (e: Exception) {
+                            e.printStackTrace()
                         }
-                        startActivity(intent, options.toBundle())
-                    } catch (e: Exception) {
-                        e.printStackTrace()
                     }
+                    // ONLY show pro upgrade dialog on phone if MainActivity is currently visible/resumed!
+                    // NEVER interrupt user if they are pulling down notifications or using another phone app!
+                    if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
+                        showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
+                    }
+                    applyPlayStoreAppRestrictions()
+                    sortAndRefreshAppLists()
                 }
-                showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
-                applyPlayStoreAppRestrictions()
-                sortAndRefreshAppLists()
             }
+        } else {
+            hasTriggeredExpiryShield = false
         }
     }
 
@@ -466,6 +480,7 @@ class MainActivity : AppCompatActivity() {
         // TEST ONLY: Long click status badge to reset daily 2-minute trial timer without clearing app data
         if (com.xternal.control.billing.DailyAppPreviewManager.FORCE_TEST_EXPIRED_TRIAL) {
             tvStatusBadge.setOnLongClickListener {
+                hasTriggeredExpiryShield = false
                 com.xternal.control.billing.DailyAppPreviewManager.resetForTest(this)
                 applyPlayStoreAppRestrictions()
                 sortAndRefreshAppLists()
@@ -2711,7 +2726,9 @@ class MainActivity : AppCompatActivity() {
                                     }
                                     startActivity(intent, options.toBundle())
                                 }
-                                showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
+                                if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
+                                    showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
+                                }
                                 applyPlayStoreAppRestrictions()
                                 sortAndRefreshAppLists()
                             } else {

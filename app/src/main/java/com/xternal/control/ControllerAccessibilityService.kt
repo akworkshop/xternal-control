@@ -51,60 +51,20 @@ class ControllerAccessibilityService : AccessibilityService() {
     private var heldTargetY2 = 0f
     private var isDualHeldTouch = false
 
-    private val enforcementHandler = Handler(Looper.getMainLooper())
-    private val enforcementRunnable = object : Runnable {
-        override fun run() {
-            try {
-                enforceDailyLimit()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            enforcementHandler.postDelayed(this, 1000)
-        }
-    }
-
-    private fun enforceDailyLimit() {
-        val extDisplayId = if (activeExternalDisplayId != -1) activeExternalDisplayId else heldDisplayId
-        if (extDisplayId <= 0) return
-        val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
-        if (isExhausted) {
-            val restrictedSet = com.xternal.control.billing.DailyAppPreviewManager.activeExternalRestrictedPackages
-            if (restrictedSet.isNotEmpty()) {
-                com.xternal.control.media.MediaSessionRemoteManager.instance?.forcePauseAllRestrictedSessions { pkg ->
-                    restrictedSet.contains(pkg)
-                }
-                // Also assert ExternalActivity to front if MainActivity was swiped away
-                try {
-                    val options = android.app.ActivityOptions.makeBasic()
-                    options.launchDisplayId = extDisplayId
-                    val intent = Intent(this, ExternalActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    }
-                    startActivity(intent, options.toBundle())
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
-    }
-
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        enforcementHandler.post(enforcementRunnable)
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
         resetHeldTouch()
-        enforcementHandler.removeCallbacks(enforcementRunnable)
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         instance = null
         resetHeldTouch()
-        enforcementHandler.removeCallbacks(enforcementRunnable)
         super.onDestroy()
     }
 
@@ -114,7 +74,8 @@ class ControllerAccessibilityService : AccessibilityService() {
             val pkg = event.packageName?.toString() ?: return
             if (pkg == packageName) return
 
-            // Filter out system packages (Play Store, Keyboards, System UI)
+            // Filter out system packages and notifications (Play Store, Keyboards, System UI / Notification Shade)
+            if (pkg == "com.android.systemui" || pkg.contains("systemui")) return
             if (com.xternal.control.billing.DailyAppPreviewManager.SYSTEM_PACKAGES.contains(pkg)) return
 
             // On Android 9+ / Android 11+, check display ID of the event
