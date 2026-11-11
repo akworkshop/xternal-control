@@ -185,6 +185,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkDailyAppPreviewLimit() {
+        // If cable/glasses are disconnected, phone apps are 100% unrestricted
+        if (externalDisplayId == -1) return
         if (isProActive()) return
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
         if (isExhausted) {
@@ -226,6 +228,7 @@ class MainActivity : AppCompatActivity() {
     private var isFirstMouseHover = true
     private val trackpadHandler = Handler(Looper.getMainLooper())
     private val longPressRunnable = Runnable {
+        if (isRestrictedInteractionBlocked()) return@Runnable
         if (!isMultiTouch) {
             hasDraggedOrScrolled = true
             
@@ -389,7 +392,14 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        mediaRemoteManager = MediaSessionRemoteManager.init(this)
+        mediaRemoteManager = MediaSessionRemoteManager.init(this).apply {
+            isPlaybackRestrictedSupplier = {
+                externalDisplayId != -1 && !isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this@MainActivity)
+            }
+            restrictedAppChecker = { pkg ->
+                com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(pkg)
+            }
+        }
         checkAndShowOnboardingGuide()
         checkAndShowDonationPrompt()
         setupPlaystoreReviewCard()
@@ -1079,6 +1089,7 @@ class MainActivity : AppCompatActivity() {
             tvStatusBadge.backgroundTintList = null
             tvConnectionInfo.text = "No physical external display found."
             deactivateTrackpadMode()
+            com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
         }
     }
     private fun setupDisplayListener() {
@@ -2327,7 +2338,16 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun isRestrictedInteractionBlocked(): Boolean {
+        if (externalDisplayId == -1 || isProActive()) return false
+        val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)
+        if (!isExhausted) return false
+        val activePkg = lastLaunchedExternalPackage
+        return !activePkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(activePkg)
+    }
+
     private fun performLeftClick() {
+        if (isRestrictedInteractionBlocked()) return
         val service = ControllerAccessibilityService.instance
         if (externalDisplayId != -1 && service != null) {
             service.dispatchClick(externalDisplayId, overlayCursorX, overlayCursorY)
@@ -2337,6 +2357,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun performRightClick() {
+        if (isRestrictedInteractionBlocked()) return
         InteractionBridge.sendRightClick()
     }
 
@@ -2664,6 +2685,8 @@ class MainActivity : AppCompatActivity() {
 
         InteractionBridge.foregroundPackageChangedListener = { pkg ->
             try {
+                // If cable/glasses are disconnected, phone activity is not restricted
+                if (externalDisplayId == -1) return@foregroundPackageChangedListener
                 if (pkg != packageName) {
                     if (!pkg.isNullOrEmpty()) {
                         val isSystemLauncher = pkg.contains("launcher") || pkg.contains("home")
