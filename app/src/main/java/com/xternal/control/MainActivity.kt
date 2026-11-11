@@ -464,7 +464,7 @@ class MainActivity : AppCompatActivity() {
     private fun initViews() {
         tvStatusBadge = findViewById(R.id.tvStatusBadge)
         // TEST ONLY: Long click status badge to reset daily 2-minute trial timer without clearing app data
-        if (com.xternal.control.billing.PlaystoreBillingManager.FORCE_TEST_EXPIRED_TRIAL) {
+        if (com.xternal.control.billing.DailyAppPreviewManager.FORCE_TEST_EXPIRED_TRIAL) {
             tvStatusBadge.setOnLongClickListener {
                 com.xternal.control.billing.DailyAppPreviewManager.resetForTest(this)
                 applyPlayStoreAppRestrictions()
@@ -2684,9 +2684,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         InteractionBridge.foregroundPackageChangedListener = { pkg ->
-            try {
-                // If cable/glasses are disconnected, phone activity is not restricted
-                if (externalDisplayId == -1) return@foregroundPackageChangedListener
+            // If cable/glasses are disconnected, phone activity is not restricted
+            if (externalDisplayId != -1) {
+                try {
                 if (pkg != packageName) {
                     if (!pkg.isNullOrEmpty()) {
                         val isSystemLauncher = pkg.contains("launcher") || pkg.contains("home")
@@ -2723,9 +2723,10 @@ class MainActivity : AppCompatActivity() {
                     checkCurrentMediaPlayback()
                     window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 250)
                     window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 500)
+                    }
+                } catch (e: Throwable) {
+                    e.printStackTrace()
                 }
-            } catch (e: Throwable) {
-                e.printStackTrace()
             }
         }
 

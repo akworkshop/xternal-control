@@ -24,6 +24,9 @@ object DailyAppPreviewManager {
     private const val KEY_LAST_WALL_TIME = "daily_preview_last_wall_time"
 
     // TEST BUILD: 2 minutes (120 seconds). For release, this will be 600 seconds (10 mins).
+    // TEST FLAG: When true, simulates expired trial for Option B preview testing
+    const val FORCE_TEST_EXPIRED_TRIAL = true
+
     const val DAILY_LIMIT_SECONDS = 120
 
     // Standard Whitelisted packages that are ALWAYS 100% free with unlimited time

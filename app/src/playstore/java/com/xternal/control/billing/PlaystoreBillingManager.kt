@@ -154,7 +154,7 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
 
     companion object {
         // Set to true for test build to experience expired trial behavior
-        const val FORCE_TEST_EXPIRED_TRIAL = true
+        const val FORCE_TEST_EXPIRED_TRIAL = DailyAppPreviewManager.FORCE_TEST_EXPIRED_TRIAL
     }
 
     override fun purchasePro(activity: Activity) {
