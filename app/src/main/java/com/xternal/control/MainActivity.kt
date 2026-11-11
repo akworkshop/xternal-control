@@ -206,29 +206,8 @@ class MainActivity : AppCompatActivity() {
             if (!hasTriggeredExpiryShield) {
                 hasTriggeredExpiryShield = true
                 val targetPkg = lastLaunchedExternalPackage
-                if (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(targetPkg)) {
-                    lastLaunchedExternalPackage = null
-                    isDesktopActive = true
-                    InteractionBridge.sendHomeRequest()
-                    if (externalDisplayId != -1) {
-                        try {
-                            val options = ActivityOptions.makeBasic()
-                            options.launchDisplayId = externalDisplayId
-                            val intent = Intent(this, ExternalActivity::class.java).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                            }
-                            startActivity(intent, options.toBundle())
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    }
-                    // ONLY show pro upgrade dialog on phone if MainActivity is currently visible/resumed!
-                    // NEVER interrupt user if they are pulling down notifications or using another phone app!
-                    if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
-                        showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
-                    }
-                    applyPlayStoreAppRestrictions()
-                    sortAndRefreshAppLists()
+                if (com.xternal.control.billing.DailyAppPreviewManager.activeExternalRestrictedPackages.isNotEmpty() || (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(targetPkg))) {
+                    bringDesktopToFront(targetPkg)
                 }
             }
         } else {
@@ -2355,6 +2334,33 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun bringDesktopToFront(lockedPkg: String? = null) {
+        if (externalDisplayId == -1) return
+        try {
+            isDesktopActive = true
+            lastLaunchedExternalPackage = null
+            InteractionBridge.sendHomeRequest()
+            val options = ActivityOptions.makeBasic()
+            options.launchDisplayId = externalDisplayId
+            val intent = Intent(this, ExternalActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra("EXTRA_SHOW_DAILY_LIMIT", true)
+                if (!lockedPkg.isNullOrEmpty()) {
+                    val app = allApps.find { it.packageName == lockedPkg }
+                    putExtra("EXTRA_LOCKED_APP_LABEL", app?.label ?: lockedPkg)
+                }
+            }
+            startActivity(intent, options.toBundle())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
+            showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
+        }
+        applyPlayStoreAppRestrictions()
+        sortAndRefreshAppLists()
+    }
+
     private fun isRestrictedInteractionBlocked(): Boolean {
         if (externalDisplayId == -1 || isProActive()) return false
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)
@@ -2716,21 +2722,7 @@ class MainActivity : AppCompatActivity() {
                                 if (::mediaRemoteManager.isInitialized) {
                                     mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
                                 }
-                                isDesktopActive = true
-                                InteractionBridge.sendHomeRequest()
-                                if (externalDisplayId != -1) {
-                                    val options = ActivityOptions.makeBasic()
-                                    options.launchDisplayId = externalDisplayId
-                                    val intent = Intent(this, ExternalActivity::class.java).apply {
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                                    }
-                                    startActivity(intent, options.toBundle())
-                                }
-                                if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
-                                    showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
-                                }
-                                applyPlayStoreAppRestrictions()
-                                sortAndRefreshAppLists()
+                                bringDesktopToFront(pkg)
                             } else {
                                 isDesktopActive = false
                                 lastLaunchedExternalPackage = pkg

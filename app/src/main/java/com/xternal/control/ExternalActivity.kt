@@ -169,6 +169,12 @@ class ExternalActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDailyLimitIntent(intent)
+    }
+
     override fun onResume() {
         super.onResume()
         if (isPipMode) {
@@ -189,6 +195,16 @@ class ExternalActivity : AppCompatActivity() {
         sortAndRefreshAppLists()
         if (!isPipMode) {
             applyBackgroundTheme()
+        }
+        handleDailyLimitIntent(intent)
+    }
+
+    private fun handleDailyLimitIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("EXTRA_SHOW_DAILY_LIMIT", false) == true) {
+            returnToDesktop()
+            val label = intent.getStringExtra("EXTRA_LOCKED_APP_LABEL") ?: "this app"
+            tvDailyLimitDesc.text = "You have used today's free preview allowance for $label.\n\nFree apps (YouTube, Chrome, Maps, Settings) remain free anytime.\n\nUpgrade to Pro for unlimited lifetime access to all apps!"
+            cvDailyLimitDialog.visibility = View.VISIBLE
         }
     }
 
