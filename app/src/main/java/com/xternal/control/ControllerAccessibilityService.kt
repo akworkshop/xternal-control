@@ -77,8 +77,9 @@ class ControllerAccessibilityService : AccessibilityService() {
             val pkg = event.packageName?.toString() ?: return
             if (pkg == packageName) return
 
-            // Filter out system packages and notifications (Play Store, Keyboards, System UI / Notification Shade)
+            // Filter out system packages, notifications, and phone home launchers
             if (pkg == "com.android.systemui" || pkg.contains("systemui")) return
+            if (pkg.contains("launcher") || pkg.contains("home")) return
             if (com.xternal.control.billing.DailyAppPreviewManager.SYSTEM_PACKAGES.contains(pkg)) return
 
             // On Android 9+ / Android 11+, check display ID of the event

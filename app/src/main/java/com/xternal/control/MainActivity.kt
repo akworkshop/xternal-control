@@ -185,6 +185,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var hasTriggeredExpiryShield = false
+    private var pendingProDialogMessage: String? = null
 
     private fun checkDailyAppPreviewLimit() {
         // If cable/glasses are disconnected, phone apps are 100% unrestricted
@@ -204,14 +205,17 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                val targetPkg = lastLaunchedExternalPackage
+                val targetPkg = lastLaunchedExternalPackage ?: com.xternal.control.billing.DailyAppPreviewManager.activeRestrictedPackage
                 if (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(targetPkg)) {
                     // Scenario 1: Show OLED black overlay shield over the restricted app, and popup Pro purchase on phone!
                     showExternalShieldOverlay(targetPkg)
+                    val app = allApps.find { it.packageName == targetPkg }
+                    val label = app?.label ?: targetPkg
+                    val msg = "⏳ Daily Free Preview Ended (2 mins).\n\nYou have used today's free preview allowance for $label.\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!"
                     if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
-                        val app = allApps.find { it.packageName == targetPkg }
-                        val label = app?.label ?: targetPkg
-                        showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nYou have used today's free preview allowance for $label.\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
+                        showProUpgradeDialog(msg)
+                    } else {
+                        pendingProDialogMessage = msg
                     }
                 }
             }
@@ -417,6 +421,10 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         dailyPreviewHandler.post(dailyPreviewRunnable)
+        pendingProDialogMessage?.let { msg ->
+            pendingProDialogMessage = null
+            showProUpgradeDialog(msg)
+        }
         try {
             // Start focusable on resume so the phone display cleanly takes focus from the previous phone app / launcher first
             window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
@@ -2841,34 +2849,29 @@ class MainActivity : AppCompatActivity() {
                 try {
                     if (pkg != packageName) {
                         if (!pkg.isNullOrEmpty()) {
-                            val isSystemLauncher = pkg.contains("launcher") || pkg.contains("home")
-                            if (isSystemLauncher) {
-                                isDesktopActive = true
-                                lastLaunchedExternalPackage = null
-                                com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
-                            } else {
-                                if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg)) {
-                                    if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
-                                        // Scenario 3: Locked restricted app opened while expired -> pause audio, hide overlay, and immediately bring desktop to front
-                                        if (::mediaRemoteManager.isInitialized) {
-                                            mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
-                                        }
-                                        hideExternalShieldOverlay()
-                                        bringDesktopToFront(pkg, showDialogOnPhone = true)
-                                    } else {
-                                        // Still has preview time left -> track time
-                                        hideExternalShieldOverlay()
-                                        isDesktopActive = false
-                                        lastLaunchedExternalPackage = pkg
-                                        com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
+                            if (pkg.contains("launcher") || pkg.contains("home")) {
+                                // Phone home launcher has nothing to do with external display, ignore!
+                            } else if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg)) {
+                                if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
+                                    // Scenario 3: Locked restricted app opened while expired -> pause audio, hide overlay, and immediately bring desktop to front
+                                    if (::mediaRemoteManager.isInitialized) {
+                                        mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
                                     }
+                                    hideExternalShieldOverlay()
+                                    bringDesktopToFront(pkg, showDialogOnPhone = true)
                                 } else {
-                                    // Free whitelisted app (YouTube, Chrome, Gallery) -> NEVER COVER!
+                                    // Still has preview time left -> track time
                                     hideExternalShieldOverlay()
                                     isDesktopActive = false
                                     lastLaunchedExternalPackage = pkg
                                     com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
                                 }
+                            } else {
+                                // Free whitelisted app (YouTube, Chrome, Gallery) -> NEVER COVER!
+                                hideExternalShieldOverlay()
+                                isDesktopActive = false
+                                lastLaunchedExternalPackage = pkg
+                                com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
                             }
                         }
                         updateMediaAppInfo(pkg)
