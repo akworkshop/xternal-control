@@ -195,17 +195,19 @@ class MainActivity : AppCompatActivity() {
         if (isProActive()) return
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
         if (isExhausted) {
-            // Immediately suppress any running playback on all restricted external apps
-            if (::mediaRemoteManager.isInitialized) {
-                mediaRemoteManager.forcePauseAllRestrictedSessions { pkg ->
-                    com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg)
+            // Trigger ONCE when preview limit transitions to exhausted
+            if (!hasTriggeredExpiryShield) {
+                hasTriggeredExpiryShield = true
+                if (::mediaRemoteManager.isInitialized) {
+                    mediaRemoteManager.forcePauseAllRestrictedSessions { pkg ->
+                        com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg)
+                    }
                 }
-            }
 
-            // If a restricted app is active on the external display and preview expired, cover it with the overlay shield!
-            val targetPkg = lastLaunchedExternalPackage
-            if (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(targetPkg)) {
-                showExternalShieldOverlay(targetPkg)
+                val targetPkg = lastLaunchedExternalPackage
+                if (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(targetPkg)) {
+                    bringDesktopToFront(targetPkg)
+                }
             }
         } else {
             hasTriggeredExpiryShield = false
@@ -396,6 +398,9 @@ class MainActivity : AppCompatActivity() {
         checkAndShowPlaystoreRatingPrompt()
         setupMediaControls()
         setupMediaDetection()
+        if (intent?.getBooleanExtra("EXTRA_TRIGGER_PURCHASE", false) == true) {
+            showProUpgradeDialog()
+        }
     }
 
     override fun onPause() {
@@ -620,6 +625,10 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnMainHome).setOnClickListener { v ->
             v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
             isDesktopActive = true
+            lastLaunchedExternalPackage = null
+            hasTriggeredExpiryShield = false
+            hideExternalShieldOverlay()
+            com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
             activeMediaPackage = packageName
             if (::mediaRemoteManager.isInitialized) {
                 mediaRemoteManager.foregroundPackage = ""
@@ -637,6 +646,7 @@ class MainActivity : AppCompatActivity() {
                     options.launchDisplayId = externalDisplayId
                     val intent = Intent(this, ExternalActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("EXTRA_SHOW_DAILY_LIMIT", false)
                     }
                     startActivity(intent, options.toBundle())
                     Toast.makeText(this, "Glasses returned to Desktop", Toast.LENGTH_SHORT).show()
@@ -2332,6 +2342,38 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun bringDesktopToFront(lockedPkg: String? = null) {
+        if (externalDisplayId == -1) return
+        try {
+            isDesktopActive = true
+            lastLaunchedExternalPackage = null
+            hideExternalShieldOverlay()
+            InteractionBridge.sendHomeRequest()
+            val options = ActivityOptions.makeBasic()
+            options.launchDisplayId = externalDisplayId
+            val intent = Intent(this, ExternalActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra("EXTRA_SHOW_DAILY_LIMIT", true)
+                if (!lockedPkg.isNullOrEmpty()) {
+                    val app = allApps.find { it.packageName == lockedPkg }
+                    putExtra("EXTRA_LOCKED_APP_LABEL", app?.label ?: lockedPkg)
+                }
+            }
+            startActivity(intent, options.toBundle())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
+            val appLabel = if (!lockedPkg.isNullOrEmpty()) {
+                val app = allApps.find { it.packageName == lockedPkg }
+                app?.label ?: lockedPkg
+            } else "This app"
+            showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nYou have used today's allowance for $appLabel.\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
+        }
+        applyPlayStoreAppRestrictions()
+        sortAndRefreshAppLists()
+    }
+
     // External Display Overlay Shield Management (Covers ONLY locked apps on Display 1)
     private var externalShieldView: View? = null
     private var isExternalShieldAttached = false
@@ -2791,40 +2833,47 @@ class MainActivity : AppCompatActivity() {
             // If cable/glasses are disconnected, phone activity is not restricted
             if (externalDisplayId != -1) {
                 try {
-                if (pkg != packageName) {
-                    if (!pkg.isNullOrEmpty()) {
-                        val isSystemLauncher = pkg.contains("launcher") || pkg.contains("home")
-                        if (isSystemLauncher) {
-                            isDesktopActive = true
-                            com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
-                        } else {
-                            if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg)) {
-                                if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
-                                    // Locked restricted app active after preview ended -> COVER WITH OVERLAY SHIELD!
-                                    showExternalShieldOverlay(pkg)
-                                    if (::mediaRemoteManager.isInitialized) {
-                                        mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
+                    if (pkg != packageName) {
+                        if (!pkg.isNullOrEmpty()) {
+                            val isSystemLauncher = pkg.contains("launcher") || pkg.contains("home")
+                            if (isSystemLauncher) {
+                                isDesktopActive = true
+                                lastLaunchedExternalPackage = null
+                                com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
+                            } else {
+                                if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg)) {
+                                    if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
+                                        // Locked restricted app active after preview ended -> pause audio and return to desktop with daily limit dialog
+                                        if (::mediaRemoteManager.isInitialized) {
+                                            mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
+                                        }
+                                        bringDesktopToFront(pkg)
+                                    } else {
+                                        // Still has preview time left -> track time
+                                        hideExternalShieldOverlay()
+                                        isDesktopActive = false
+                                        lastLaunchedExternalPackage = pkg
+                                        com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
                                     }
                                 } else {
-                                    // Still has preview time left -> hide shield and track time
+                                    // Free whitelisted app (YouTube, Chrome, Gallery) -> NEVER COVER!
                                     hideExternalShieldOverlay()
                                     isDesktopActive = false
                                     lastLaunchedExternalPackage = pkg
                                     com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
                                 }
-                            } else {
-                                // Free whitelisted app (YouTube, Chrome, Gallery) -> NEVER COVER!
-                                hideExternalShieldOverlay()
-                                isDesktopActive = false
-                                lastLaunchedExternalPackage = pkg
-                                com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
                             }
                         }
-                    }
-                    updateMediaAppInfo(pkg)
-                    checkCurrentMediaPlayback()
-                    window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 250)
-                    window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 500)
+                        updateMediaAppInfo(pkg)
+                        checkCurrentMediaPlayback()
+                        window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 250)
+                        window?.decorView?.postDelayed({ checkCurrentMediaPlayback() }, 500)
+                    } else {
+                        // Desktop is in foreground
+                        isDesktopActive = true
+                        lastLaunchedExternalPackage = null
+                        hideExternalShieldOverlay()
+                        com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
                     }
                 } catch (e: Throwable) {
                     e.printStackTrace()
@@ -2836,6 +2885,8 @@ class MainActivity : AppCompatActivity() {
             try {
                 isDesktopActive = isForeground
                 if (isForeground) {
+                    lastLaunchedExternalPackage = null
+                    hasTriggeredExpiryShield = false
                     hideExternalShieldOverlay()
                     com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
                     applyPlayStoreAppRestrictions()

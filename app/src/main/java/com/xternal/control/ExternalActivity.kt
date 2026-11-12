@@ -201,7 +201,8 @@ class ExternalActivity : AppCompatActivity() {
 
     private fun handleDailyLimitIntent(intent: Intent?) {
         if (intent?.getBooleanExtra("EXTRA_SHOW_DAILY_LIMIT", false) == true) {
-            returnToDesktop()
+            intent.removeExtra("EXTRA_SHOW_DAILY_LIMIT")
+            returnToDesktop(closeDailyLimit = false)
             val label = intent.getStringExtra("EXTRA_LOCKED_APP_LABEL") ?: "this app"
             tvDailyLimitDesc.text = "You have used today's free preview allowance for $label.\n\nFree apps (YouTube, Chrome, Maps, Settings) remain free anytime.\n\nUpgrade to Pro for unlimited lifetime access to all apps!"
             cvDailyLimitDialog.visibility = View.VISIBLE
@@ -714,14 +715,17 @@ class ExternalActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    private fun returnToDesktop() {
+    private fun returnToDesktop(closeDailyLimit: Boolean = true) {
         closeVirtualApps()
         layoutStartMenu.visibility = View.GONE
-
+        if (closeDailyLimit) {
+            cvDailyLimitDialog.visibility = View.GONE
+        }
         launcherContainer.visibility = View.VISIBLE
         applyBackgroundTheme()
         InteractionBridge.sendPipStateChanged(false)
         InteractionBridge.sendForegroundPackageChanged(packageName)
+        InteractionBridge.sendDesktopForegroundState(true)
 
         currentTrackedPackage = ""
         com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
