@@ -88,10 +88,9 @@ class ControllerAccessibilityService : AccessibilityService() {
             }
 
             val currentExtId = if (activeExternalDisplayId != -1) activeExternalDisplayId else heldDisplayId
-            val isTrackedExternalRestricted = com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg)
-            // If the event was explicitly on the default phone screen (display 0) while external screen is active,
-            // ignore so phone apps (WhatsApp, Gmail, etc.) never interfere, UNLESS this is a restricted app we are tracking!
-            if (eventDisplayId == Display.DEFAULT_DISPLAY && currentExtId > 0 && !isTrackedExternalRestricted) {
+            // If the event was on the default phone screen (display 0) while external screen is active,
+            // ALWAYS ignore so phone apps (WhatsApp, Gmail, SBS on phone, etc.) are 100% unrestricted and never interfered with!
+            if (eventDisplayId == Display.DEFAULT_DISPLAY && currentExtId > 0) {
                 return
             }
 

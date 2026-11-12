@@ -390,14 +390,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        mediaRemoteManager = MediaSessionRemoteManager.init(this).apply {
-            isPlaybackRestrictedSupplier = {
-                externalDisplayId != -1 && !isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this@MainActivity)
-            }
-            restrictedAppChecker = { pkg ->
-                com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(pkg)
-            }
-        }
+        mediaRemoteManager = MediaSessionRemoteManager.init(this)
         checkAndShowOnboardingGuide()
         checkAndShowDonationPrompt()
         setupPlaystoreReviewCard()

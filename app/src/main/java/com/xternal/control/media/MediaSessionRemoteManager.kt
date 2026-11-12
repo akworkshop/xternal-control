@@ -55,9 +55,6 @@ class MediaSessionRemoteManager private constructor(private val context: Context
             refreshActiveSessions()
         }
 
-    var isPlaybackRestrictedSupplier: (() -> Boolean)? = null
-    var restrictedAppChecker: ((String) -> Boolean)? = null
-
     var onStateChangedListener: ((MediaSessionState) -> Unit)? = null
 
     private val tickerRunnable = object : Runnable {
@@ -74,10 +71,6 @@ class MediaSessionRemoteManager private constructor(private val context: Context
             mainHandler.post {
                 notifyStateChanged()
                 if (state?.state == PlaybackState.STATE_PLAYING) {
-                    val pkg = activeController?.packageName ?: ""
-                    if (isPlaybackRestrictedSupplier?.invoke() == true && restrictedAppChecker?.invoke(pkg) == true) {
-                        pause()
-                    }
                     mainHandler.removeCallbacks(tickerRunnable)
                     mainHandler.post(tickerRunnable)
                 } else {
