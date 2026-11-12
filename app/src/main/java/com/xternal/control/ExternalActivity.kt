@@ -605,15 +605,6 @@ class ExternalActivity : AppCompatActivity() {
         tvDailyLimitDesc.text = "You have used today's free preview allowance for $label.\n\nFree apps (YouTube, Chrome, Maps, Settings) remain free anytime.\n\nUpgrade to Pro for unlimited lifetime access to all apps!"
         cvDailyLimitDialog.visibility = View.VISIBLE
         returnToDesktop()
-        // Re-bring ExternalActivity to top of external display stack
-        try {
-            val intent = Intent(this, ExternalActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
     }
 
     private fun launchApp(packageName: String) {

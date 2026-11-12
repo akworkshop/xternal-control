@@ -202,13 +202,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // Only trigger the visual shield return ONCE per expiry transition:
-            if (!hasTriggeredExpiryShield) {
-                hasTriggeredExpiryShield = true
-                val targetPkg = lastLaunchedExternalPackage
-                if (com.xternal.control.billing.DailyAppPreviewManager.activeExternalRestrictedPackages.isNotEmpty() || (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(targetPkg))) {
-                    bringDesktopToFront(targetPkg)
-                }
+            // If a restricted app is active on the external display and preview expired, cover it with the overlay shield!
+            val targetPkg = lastLaunchedExternalPackage
+            if (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(targetPkg)) {
+                showExternalShieldOverlay(targetPkg)
             }
         } else {
             hasTriggeredExpiryShield = false
@@ -1084,6 +1081,8 @@ class MainActivity : AppCompatActivity() {
             tvStatusBadge.backgroundTintList = null
             tvConnectionInfo.text = "No physical external display found."
             deactivateTrackpadMode()
+            hideExternalShieldOverlay()
+            externalShieldView = null
             ControllerAccessibilityService.activeExternalDisplayId = -1
             com.xternal.control.billing.DailyAppPreviewManager.clearExternalSession()
         }
@@ -1130,8 +1129,7 @@ class MainActivity : AppCompatActivity() {
             options.launchDisplayId = externalDisplayId
             launchIntent.addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             )
             startActivity(launchIntent, options.toBundle())
         } catch (e: Throwable) {
@@ -2334,31 +2332,114 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun bringDesktopToFront(lockedPkg: String? = null) {
-        if (externalDisplayId == -1) return
-        try {
-            isDesktopActive = true
-            lastLaunchedExternalPackage = null
-            InteractionBridge.sendHomeRequest()
-            val options = ActivityOptions.makeBasic()
-            options.launchDisplayId = externalDisplayId
-            val intent = Intent(this, ExternalActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                putExtra("EXTRA_SHOW_DAILY_LIMIT", true)
-                if (!lockedPkg.isNullOrEmpty()) {
-                    val app = allApps.find { it.packageName == lockedPkg }
-                    putExtra("EXTRA_LOCKED_APP_LABEL", app?.label ?: lockedPkg)
+    // External Display Overlay Shield Management (Covers ONLY locked apps on Display 1)
+    private var externalShieldView: View? = null
+    private var isExternalShieldAttached = false
+
+    private fun showExternalShieldOverlay(lockedPackage: String? = null) {
+        if (externalDisplayId == -1 || isProActive()) return
+        runOnUiThread {
+            try {
+                val display = displayManager.getDisplay(externalDisplayId) ?: return@runOnUiThread
+                val displayContext = applicationContext.createDisplayContext(display)
+                val wm = displayContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+
+                if (externalShieldView == null) {
+                    val inflater = LayoutInflater.from(displayContext)
+                    externalShieldView = inflater.inflate(R.layout.layout_external_shield_overlay, null)
+
+                    val btnBack = externalShieldView?.findViewById<Button>(R.id.btnShieldBackDesktop)
+                    val btnUpgrade = externalShieldView?.findViewById<Button>(R.id.btnShieldUpgrade)
+
+                    btnBack?.setOnClickListener {
+                        hideExternalShieldOverlay()
+                        isDesktopActive = true
+                        lastLaunchedExternalPackage = null
+                        try {
+                            if (externalDisplayId != -1) {
+                                val options = ActivityOptions.makeBasic()
+                                options.launchDisplayId = externalDisplayId
+                                val intent = Intent(this@MainActivity, ExternalActivity::class.java).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                                }
+                                startActivity(intent, options.toBundle())
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        InteractionBridge.sendHomeRequest()
+                    }
+
+                    btnUpgrade?.setOnClickListener {
+                        hideExternalShieldOverlay()
+                        isDesktopActive = true
+                        lastLaunchedExternalPackage = null
+                        try {
+                            if (externalDisplayId != -1) {
+                                val options = ActivityOptions.makeBasic()
+                                options.launchDisplayId = externalDisplayId
+                                val intent = Intent(this@MainActivity, ExternalActivity::class.java).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                                }
+                                startActivity(intent, options.toBundle())
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        InteractionBridge.sendHomeRequest()
+                        showProUpgradeDialog()
+                    }
                 }
+
+                // Update text with locked app label if known
+                val tvDesc = externalShieldView?.findViewById<TextView>(R.id.tvShieldDesc)
+                if (!lockedPackage.isNullOrEmpty()) {
+                    val app = allApps.find { it.packageName == lockedPackage }
+                    val label = app?.label ?: lockedPackage
+                    tvDesc?.text = "You have used today's free preview allowance for $label.\n\nFree apps (YouTube, Chrome, Gallery, Settings) remain free anytime.\n\nUpgrade to Pro for unlimited lifetime access to all apps!"
+                }
+
+                if (!isExternalShieldAttached && externalShieldView != null) {
+                    val params = WindowManager.LayoutParams(
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                        PixelFormat.TRANSLUCENT
+                    ).apply {
+                        gravity = Gravity.CENTER
+                    }
+                    wm.addView(externalShieldView, params)
+                    isExternalShieldAttached = true
+                }
+
+                externalShieldView?.visibility = View.VISIBLE
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-            startActivity(intent, options.toBundle())
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
-        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
-            showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
+    }
+
+    private fun hideExternalShieldOverlay() {
+        runOnUiThread {
+            try {
+                if (isExternalShieldAttached && externalShieldView != null) {
+                    val display = if (externalDisplayId != -1) displayManager.getDisplay(externalDisplayId) else null
+                    if (display != null) {
+                        val displayContext = applicationContext.createDisplayContext(display)
+                        val wm = displayContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                        wm.removeViewImmediate(externalShieldView)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                isExternalShieldAttached = false
+                externalShieldView?.visibility = View.GONE
+            }
         }
-        applyPlayStoreAppRestrictions()
-        sortAndRefreshAppLists()
     }
 
     private fun isRestrictedInteractionBlocked(): Boolean {
@@ -2717,13 +2798,23 @@ class MainActivity : AppCompatActivity() {
                             isDesktopActive = true
                             com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
                         } else {
-                            // Check if this newly focused package is in external restricted set and daily allowance is exhausted
-                            if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg) && com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
-                                if (::mediaRemoteManager.isInitialized) {
-                                    mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
+                            if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg)) {
+                                if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
+                                    // Locked restricted app active after preview ended -> COVER WITH OVERLAY SHIELD!
+                                    showExternalShieldOverlay(pkg)
+                                    if (::mediaRemoteManager.isInitialized) {
+                                        mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
+                                    }
+                                } else {
+                                    // Still has preview time left -> hide shield and track time
+                                    hideExternalShieldOverlay()
+                                    isDesktopActive = false
+                                    lastLaunchedExternalPackage = pkg
+                                    com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
                                 }
-                                bringDesktopToFront(pkg)
                             } else {
+                                // Free whitelisted app (YouTube, Chrome, Gallery) -> NEVER COVER!
+                                hideExternalShieldOverlay()
                                 isDesktopActive = false
                                 lastLaunchedExternalPackage = pkg
                                 com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
@@ -2745,6 +2836,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 isDesktopActive = isForeground
                 if (isForeground) {
+                    hideExternalShieldOverlay()
                     com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
                     applyPlayStoreAppRestrictions()
                     sortAndRefreshAppLists()
