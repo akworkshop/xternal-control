@@ -173,6 +173,8 @@ class ExternalActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleDailyLimitIntent(intent)
+        applyPlayStoreAppRestrictions()
+        sortAndRefreshAppLists()
     }
 
     override fun onResume() {
@@ -184,7 +186,8 @@ class ExternalActivity : AppCompatActivity() {
             rootContainer.setBackgroundColor(Color.BLACK)
             InteractionBridge.sendDesktopForegroundState(false)
         } else {
-            returnToDesktop()
+            val shouldPreserveDialog = cvDailyLimitDialog.visibility == View.VISIBLE || intent?.getBooleanExtra("EXTRA_SHOW_DAILY_LIMIT", false) == true
+            returnToDesktop(closeDailyLimit = !shouldPreserveDialog)
             InteractionBridge.sendDesktopForegroundState(true)
         }
         systemTrayHandler.post(systemTrayRunnable)
@@ -518,30 +521,9 @@ class ExternalActivity : AppCompatActivity() {
             return
         }
 
-        val preferredPackages = listOf(
-            "com.google.android.youtube",
-            "com.android.chrome",
-            "com.google.android.apps.maps",
-            "org.mozilla.firefox",
-            "com.google.android.googlequicksearchbox",
-            "com.android.settings"
-        )
-
-        val allowedPackages = allApps.filter { app ->
-            preferredPackages.contains(app.packageName)
-        }.map { it.packageName }.toMutableSet()
-
-        if (allowedPackages.size < 4) {
-            val otherApps = allApps.filter { !allowedPackages.contains(it.packageName) }
-            for (app in otherApps) {
-                if (allowedPackages.size >= 4) break
-                allowedPackages.add(app.packageName)
-            }
-        }
-
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)
         for (app in allApps) {
-            val isRestricted = !allowedPackages.contains(app.packageName)
+            val isRestricted = com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(app.packageName)
             // If user still has daily preview minutes left, don't hard-lock the app icons
             app.isLocked = isRestricted && isExhausted
         }
@@ -550,7 +532,10 @@ class ExternalActivity : AppCompatActivity() {
     private fun sortAndRefreshAppLists() {
         applyPlayStoreAppRestrictions()
         val updatedApps = allApps.map { app ->
-            app.copy(isFavourite = favouritePackages.contains(app.packageName))
+            app.copy(
+                isFavourite = favouritePackages.contains(app.packageName),
+                isLocked = app.isLocked
+            )
         }
         allApps = updatedApps
 
@@ -603,9 +588,9 @@ class ExternalActivity : AppCompatActivity() {
     private fun showDailyLimitDialog(packageName: String) {
         val app = allApps.find { it.packageName == packageName }
         val label = app?.label ?: packageName
+        returnToDesktop(closeDailyLimit = false)
         tvDailyLimitDesc.text = "You have used today's free preview allowance for $label.\n\nFree apps (YouTube, Chrome, Maps, Settings) remain free anytime.\n\nUpgrade to Pro for unlimited lifetime access to all apps!"
         cvDailyLimitDialog.visibility = View.VISIBLE
-        returnToDesktop()
     }
 
     private fun launchApp(packageName: String) {

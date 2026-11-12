@@ -37,6 +37,12 @@ object DailyAppPreviewManager {
         "org.mozilla.firefox",
         "com.google.android.googlequicksearchbox",
         "com.android.settings",
+        "com.google.android.apps.photos",
+        "com.sec.android.gallery3d",
+        "com.android.gallery3d",
+        "com.coloros.gallery3d",
+        "com.vivo.gallery",
+        "com.miui.gallery",
         "mock.browser",
         "mock.notes",
         "mock.map"

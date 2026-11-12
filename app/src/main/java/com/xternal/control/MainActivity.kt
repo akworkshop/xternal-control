@@ -201,23 +201,13 @@ class MainActivity : AppCompatActivity() {
                 hasTriggeredExpiryShield = true
                 if (::mediaRemoteManager.isInitialized) {
                     mediaRemoteManager.forcePauseAllRestrictedSessions { pkg ->
-                        com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg)
+                        com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(pkg)
                     }
                 }
 
                 val targetPkg = lastLaunchedExternalPackage ?: com.xternal.control.billing.DailyAppPreviewManager.activeRestrictedPackage
-                if (!targetPkg.isNullOrEmpty() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(targetPkg)) {
-                    // Scenario 1: Show OLED black overlay shield over the restricted app, and popup Pro purchase on phone!
-                    showExternalShieldOverlay(targetPkg)
-                    val app = allApps.find { it.packageName == targetPkg }
-                    val label = app?.label ?: targetPkg
-                    val msg = "⏳ Daily Free Preview Ended (2 mins).\n\nYou have used today's free preview allowance for $label.\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!"
-                    if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
-                        showProUpgradeDialog(msg)
-                    } else {
-                        pendingProDialogMessage = msg
-                    }
-                }
+                // Direct return to desktop and show expiration notice on both external display and phone
+                bringDesktopToFront(targetPkg, showDialogOnPhone = true)
             }
         } else {
             hasTriggeredExpiryShield = false
@@ -2374,14 +2364,16 @@ class MainActivity : AppCompatActivity() {
         try {
             isDesktopActive = true
             lastLaunchedExternalPackage = null
-            hasTriggeredExpiryShield = false
+            if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
+                hasTriggeredExpiryShield = true
+            }
             hideExternalShieldOverlay()
-            InteractionBridge.sendHomeRequest()
             val options = ActivityOptions.makeBasic()
             options.launchDisplayId = externalDisplayId
             val intent = Intent(this, ExternalActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                putExtra("EXTRA_SHOW_DAILY_LIMIT", !lockedPkg.isNullOrEmpty())
+                val shouldShowDailyLimit = !lockedPkg.isNullOrEmpty() || com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this@MainActivity)
+                putExtra("EXTRA_SHOW_DAILY_LIMIT", shouldShowDailyLimit)
                 if (!lockedPkg.isNullOrEmpty()) {
                     val app = allApps.find { it.packageName == lockedPkg }
                     putExtra("EXTRA_LOCKED_APP_LABEL", app?.label ?: lockedPkg)
@@ -2391,12 +2383,17 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        if (showDialogOnPhone && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
+        if (showDialogOnPhone) {
             val appLabel = if (!lockedPkg.isNullOrEmpty()) {
                 val app = allApps.find { it.packageName == lockedPkg }
                 app?.label ?: lockedPkg
             } else "This app"
-            showProUpgradeDialog("⏳ Daily Free Preview Ended (2 mins).\n\nYou have used today's allowance for $appLabel.\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!")
+            val msg = "⏳ Daily Free Preview Ended (2 mins).\n\nYou have used today's free preview allowance for $appLabel.\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!"
+            if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
+                showProUpgradeDialog(msg)
+            } else {
+                pendingProDialogMessage = msg
+            }
         }
         applyPlayStoreAppRestrictions()
         sortAndRefreshAppLists()
@@ -2551,6 +2548,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun sortAndRefreshAppLists() {
+        applyPlayStoreAppRestrictions()
         // Filter apps based on search query
         val filteredApps = if (appSearchQuery.isEmpty()) {
             allApps
@@ -2628,30 +2626,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val preferredPackages = listOf(
-            "com.google.android.youtube",
-            "com.android.chrome",
-            "com.google.android.apps.maps",
-            "org.mozilla.firefox",
-            "com.google.android.googlequicksearchbox",
-            "com.android.settings"
-        )
-
-        val allowedPackages = allApps.filter { app ->
-            preferredPackages.contains(app.packageName)
-        }.map { it.packageName }.toMutableSet()
-
-        if (allowedPackages.size < 4) {
-            val otherApps = allApps.filter { !allowedPackages.contains(it.packageName) }
-            for (app in otherApps) {
-                if (allowedPackages.size >= 4) break
-                allowedPackages.add(app.packageName)
-            }
-        }
-
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)
         for (app in allApps) {
-            val isRestricted = !allowedPackages.contains(app.packageName)
+            val isRestricted = com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(app.packageName)
             // If user still has daily preview minutes left, allow launching without padlock
             app.isLocked = isRestricted && isExhausted
         }
@@ -2851,7 +2828,7 @@ class MainActivity : AppCompatActivity() {
                         if (!pkg.isNullOrEmpty()) {
                             if (pkg.contains("launcher") || pkg.contains("home")) {
                                 // Phone home launcher has nothing to do with external display, ignore!
-                            } else if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(pkg)) {
+                            } else if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(pkg)) {
                                 if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
                                     // Scenario 3: Locked restricted app opened while expired -> pause audio, hide overlay, and immediately bring desktop to front
                                     if (::mediaRemoteManager.isInitialized) {
@@ -2864,6 +2841,7 @@ class MainActivity : AppCompatActivity() {
                                     hideExternalShieldOverlay()
                                     isDesktopActive = false
                                     lastLaunchedExternalPackage = pkg
+                                    com.xternal.control.billing.DailyAppPreviewManager.registerExternalApp(pkg)
                                     com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, pkg)
                                 }
                             } else {
