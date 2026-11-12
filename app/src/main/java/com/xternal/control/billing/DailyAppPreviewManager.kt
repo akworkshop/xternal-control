@@ -60,7 +60,8 @@ object DailyAppPreviewManager {
     // Set of all restricted packages that were launched or active on the external display this session
     val activeExternalRestrictedPackages = mutableSetOf<String>()
 
-    private var activeRestrictedPackage: String? = null
+    var activeRestrictedPackage: String? = null
+        private set
     private var lastTrackingRealtimeMs: Long = 0L
 
     @Synchronized
