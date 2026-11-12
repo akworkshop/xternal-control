@@ -1926,18 +1926,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun isExternalScreenPlayingRestrictedApp(mediaPkg: String): Boolean {
+        // If cable/glasses are disconnected, phone is 100% free to play
+        if (externalDisplayId == -1) return false
+        // If Pro version is active, unlimited play everywhere
+        if (isProActive()) return false
+        // If daily preview is NOT exhausted, allow play
+        if (!com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) return false
+
+        // Check what is currently open on the external screen:
+        // 1. If external screen is showing Xternal Desktop -> ALLOW PLAY!
+        if (isDesktopActive) return false
+
+        val extPkg = lastLaunchedExternalPackage
+        // 2. If external screen app is null/empty -> ALLOW PLAY!
+        if (extPkg.isNullOrEmpty()) return false
+
+        // 3. If external screen app is a free whitelisted app (YouTube, Chrome, Gallery, Settings) -> ALLOW PLAY!
+        if (!com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(extPkg)) return false
+
+        // 4. Only block if the media that is playing belongs to the app currently running on the external display!
+        return extPkg == mediaPkg
+    }
+
     private fun setupMediaDetection() {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
         if (::mediaRemoteManager.isInitialized) {
             mediaRemoteManager.onStateChangedListener = { state ->
                 runOnUiThread {
-                    // Workaround: If daily preview is exhausted and a restricted app tries to resume playing, force pause!
-                    if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
-                        val currentMediaPkg = activeMediaPackage
-                        if (state.isPlaying && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(currentMediaPkg)) {
-                            mediaRemoteManager.pause()
-                        }
+                    val currentMediaPkg = activeMediaPackage
+                    if (state.isPlaying && isExternalScreenPlayingRestrictedApp(currentMediaPkg)) {
+                        mediaRemoteManager.pause()
                     }
                     applyMediaSessionState(state)
                 }

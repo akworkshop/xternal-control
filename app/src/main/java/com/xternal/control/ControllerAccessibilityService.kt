@@ -22,6 +22,9 @@ class ControllerAccessibilityService : AccessibilityService() {
         @Volatile
         var activeExternalDisplayId: Int = -1
 
+        @Volatile
+        var lastExternalPackage: String? = null
+
         // Duration of each continued-stroke segment while a held touch follows the trackpad
         private const val HELD_SEGMENT_MS = 16L
     }
@@ -88,12 +91,18 @@ class ControllerAccessibilityService : AccessibilityService() {
             }
 
             val currentExtId = if (activeExternalDisplayId != -1) activeExternalDisplayId else heldDisplayId
-            // If the event was on the default phone screen (display 0) while external screen is active,
-            // ALWAYS ignore so phone apps (WhatsApp, Gmail, SBS on phone, etc.) are 100% unrestricted and never interfered with!
+            // If the event was on the default phone screen (display 0) while external screen is active:
             if (eventDisplayId == Display.DEFAULT_DISPLAY && currentExtId > 0) {
+                // If the app now focused on the phone was the one running on the external display,
+                // it has migrated to the phone screen. Mark external screen as desktop!
+                if (pkg == lastExternalPackage) {
+                    lastExternalPackage = null
+                    InteractionBridge.sendDesktopForegroundState(true)
+                }
                 return
             }
 
+            lastExternalPackage = pkg
             InteractionBridge.sendForegroundPackageChanged(pkg)
         }
     }
