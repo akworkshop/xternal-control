@@ -197,17 +197,34 @@ class MainActivity : AppCompatActivity() {
         if (isProActive()) return
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
         if (isExhausted) {
-            // Trigger ONCE when preview limit transitions to exhausted while not already on Desktop
+            // Safety-net check: inspect actual topmost window on external display (Android 11+)
+            // Catches restricted apps re-opened via native App Drawer / Recents
+            val topExtPkg = ControllerAccessibilityService.instance?.getTopExternalApplicationPackage(externalDisplayId)
+            if (!topExtPkg.isNullOrBlank()) {
+                if (com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, topExtPkg)) {
+                    hasTriggeredExpiryShield = true
+                    if (::mediaRemoteManager.isInitialized) {
+                        mediaRemoteManager.forcePauseAllRestrictedSessions { pkg ->
+                            pkg == topExtPkg || com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, pkg)
+                        }
+                    }
+                    bringDesktopToFront(topExtPkg, showDialogOnPhone = true)
+                } else if (topExtPkg == packageName) {
+                    isDesktopActive = true
+                }
+                return
+            }
+
+            // Fallback when Accessibility window query is unavailable (Android < 11 or service off)
             if (!hasTriggeredExpiryShield && !isDesktopActive) {
                 hasTriggeredExpiryShield = true
                 if (::mediaRemoteManager.isInitialized) {
                     mediaRemoteManager.forcePauseAllRestrictedSessions { pkg ->
-                        com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(pkg)
+                        com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, pkg)
                     }
                 }
 
                 val targetPkg = lastLaunchedExternalPackage ?: com.xternal.control.billing.DailyAppPreviewManager.activeRestrictedPackage
-                // Direct return to desktop and show expiration notice on both external display and phone
                 bringDesktopToFront(targetPkg, showDialogOnPhone = true)
             }
         } else {
@@ -2355,8 +2372,13 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private var lastBringDesktopTimeMs: Long = 0L
+
     private fun bringDesktopToFront(lockedPkg: String? = null, showDialogOnPhone: Boolean = true) {
         if (externalDisplayId == -1) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastBringDesktopTimeMs < 1200L) return
+        lastBringDesktopTimeMs = now
         try {
             isDesktopActive = true
             lastLaunchedExternalPackage = null
@@ -2374,7 +2396,8 @@ class MainActivity : AppCompatActivity() {
                     putExtra("EXTRA_LOCKED_APP_LABEL", app?.label ?: lockedPkg)
                 }
             }
-            startActivity(intent, options.toBundle())
+            val launcherContext: Context = ControllerAccessibilityService.instance ?: this
+            launcherContext.startActivity(intent, options.toBundle())
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -2722,7 +2745,7 @@ class MainActivity : AppCompatActivity() {
                         if (!pkg.isNullOrEmpty()) {
                             if (pkg.contains("launcher") || pkg.contains("home")) {
                                 // Phone home launcher has nothing to do with external display, ignore!
-                            } else if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(pkg)) {
+                            } else if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, pkg)) {
                                 if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
                                     // Scenario 3: Locked restricted app opened while expired -> pause audio and immediately bring desktop to front
                                     if (::mediaRemoteManager.isInitialized) {

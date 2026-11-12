@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 
 class ControllerAccessibilityService : AccessibilityService() {
 
@@ -71,16 +72,71 @@ class ControllerAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
+    /**
+     * Queries the topmost application window currently visible on [displayId] (Android 11+).
+     * Ignores keyboards (TYPE_INPUT_METHOD), system bars, and overlays so an open keyboard
+     * on top of a whitelisted browser (e.g. Chrome) does not misidentify the foreground app.
+     */
+    fun getTopExternalApplicationPackage(displayId: Int): String? {
+        if (displayId <= 0) return null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val displayWindows = windowsOnAllDisplays.get(displayId) ?: return null
+                var topLayer = Int.MIN_VALUE
+                var topPkg: String? = null
+                for (win in displayWindows) {
+                    if (win.type != AccessibilityWindowInfo.TYPE_APPLICATION) continue
+                    val pkg = win.root?.packageName?.toString()
+                    if (pkg.isNullOrBlank()) continue
+                    if (win.layer >= topLayer) {
+                        topLayer = win.layer
+                        topPkg = pkg
+                    }
+                }
+                return topPkg
+            } catch (_: Throwable) {
+            }
+        }
+        return null
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        val type = event.eventType
+        if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && type != AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            return
+        }
+
+        val currentExtId = if (activeExternalDisplayId != -1) activeExternalDisplayId else heldDisplayId
+
+        // On Android 11+, check the actual topmost application window on the external display first.
+        // This reliably catches apps launched from native App Drawer / Recents even if event.displayId is missing.
+        if (currentExtId > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val topExtPkg = getTopExternalApplicationPackage(currentExtId)
+            if (!topExtPkg.isNullOrBlank()) {
+                if (topExtPkg == packageName) {
+                    if (lastExternalPackage != packageName) {
+                        lastExternalPackage = packageName
+                        InteractionBridge.sendDesktopForegroundState(true)
+                    }
+                } else if (topExtPkg != lastExternalPackage) {
+                    lastExternalPackage = topExtPkg
+                    InteractionBridge.sendForegroundPackageChanged(topExtPkg)
+                }
+                // Still allow phone-migration check below if this was a phone window state change
+                if (type == AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
+            }
+        }
+
+        if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val pkg = event.packageName?.toString() ?: return
             if (pkg == packageName) return
 
-            // Filter out system packages, notifications, and phone home launchers
+            // Filter out system packages, notifications, keyboards, and phone home launchers
             if (pkg == "com.android.systemui" || pkg.contains("systemui")) return
             if (pkg.contains("launcher") || pkg.contains("home")) return
-            if (com.xternal.control.billing.DailyAppPreviewManager.SYSTEM_PACKAGES.contains(pkg)) return
+            if (!com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, pkg) &&
+                com.xternal.control.billing.DailyAppPreviewManager.SYSTEM_PACKAGES.contains(pkg)) return
 
             // On Android 9+ / Android 11+, check display ID of the event
             val eventDisplayId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -91,7 +147,6 @@ class ControllerAccessibilityService : AccessibilityService() {
                 -1
             }
 
-            val currentExtId = if (activeExternalDisplayId != -1) activeExternalDisplayId else heldDisplayId
             // If the event was on the default phone screen (display 0) while external screen is active:
             if (eventDisplayId == Display.DEFAULT_DISPLAY && currentExtId > 0) {
                 // If the app now focused on the phone was the one running on the external display,
@@ -103,8 +158,10 @@ class ControllerAccessibilityService : AccessibilityService() {
                 return
             }
 
-            lastExternalPackage = pkg
-            InteractionBridge.sendForegroundPackageChanged(pkg)
+            if (eventDisplayId == currentExtId || eventDisplayId == -1) {
+                lastExternalPackage = pkg
+                InteractionBridge.sendForegroundPackageChanged(pkg)
+            }
         }
     }
 

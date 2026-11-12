@@ -140,12 +140,39 @@ object DailyAppPreviewManager {
         return if (remaining > 0) remaining else 0
     }
 
+    private var cachedImePackages: Set<String> = emptySet()
+    private var lastImeRefreshMs: Long = 0L
+
+    @Synchronized
+    fun refreshImePackages(context: Context) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastImeRefreshMs < 30_000L && cachedImePackages.isNotEmpty()) return
+        try {
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            val imeList = imm?.enabledInputMethodList
+            if (imeList != null) {
+                cachedImePackages = imeList.mapNotNull { it.packageName }.toSet()
+                lastImeRefreshMs = now
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    @Synchronized
+    fun isRestrictedApp(context: Context, packageName: String): Boolean {
+        refreshImePackages(context)
+        return isRestrictedApp(packageName)
+    }
+
     @Synchronized
     fun isRestrictedApp(packageName: String): Boolean {
         if (packageName.isBlank()) return false
+        // Xternal Control itself is ALWAYS whitelisted so it can never lock itself
+        if (packageName == "com.xternal.control" || packageName.startsWith("com.xternal.control.")) return false
         if (packageName == "android" || packageName.startsWith("com.android.systemui")) return false
         if (packageName.contains("launcher") || packageName.contains("home")) return false
         if (SYSTEM_PACKAGES.contains(packageName)) return false
+        if (cachedImePackages.contains(packageName)) return false
         return !WHITELISTED_PACKAGES.contains(packageName)
     }
 
