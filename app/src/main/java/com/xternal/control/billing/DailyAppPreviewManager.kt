@@ -159,6 +159,17 @@ object DailyAppPreviewManager {
     }
 
     @Synchronized
+    fun isSystemOrImePackage(context: Context, packageName: String): Boolean {
+        if (packageName.isBlank()) return true
+        refreshImePackages(context)
+        if (packageName == "android" || packageName.startsWith("com.android.systemui") || packageName.contains("systemui")) return true
+        if (packageName.contains("launcher") || packageName.contains("home")) return true
+        if (SYSTEM_PACKAGES.contains(packageName)) return true
+        if (cachedImePackages.contains(packageName)) return true
+        return false
+    }
+
+    @Synchronized
     fun isRestrictedApp(context: Context, packageName: String): Boolean {
         refreshImePackages(context)
         return isRestrictedApp(packageName)
@@ -230,7 +241,7 @@ object DailyAppPreviewManager {
         val deltaMs = nowRealtime - lastTrackingRealtimeMs
         if (deltaMs >= 1000L) {
             val deltaSeconds = (deltaMs / 1000L).toInt()
-            lastTrackingRealtimeMs = nowRealtime
+            lastTrackingRealtimeMs += deltaSeconds * 1000L
             recordConsumedSeconds(context, deltaSeconds)
         }
 
@@ -242,8 +253,8 @@ object DailyAppPreviewManager {
         if (activeRestrictedPackage != null && lastTrackingRealtimeMs > 0L) {
             val nowRealtime = SystemClock.elapsedRealtime()
             val deltaMs = nowRealtime - lastTrackingRealtimeMs
-            if (deltaMs > 0L) {
-                val seconds = Math.max(1, (deltaMs / 1000L).toInt())
+            if (deltaMs >= 1000L) {
+                val seconds = (deltaMs / 1000L).toInt()
                 recordConsumedSeconds(context, seconds)
             }
         }
