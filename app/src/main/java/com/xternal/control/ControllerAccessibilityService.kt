@@ -2,8 +2,11 @@ package com.xternal.control
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.app.ActivityOptions
+import android.content.Context
 import android.content.Intent
 import android.graphics.Path
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -25,6 +28,12 @@ class ControllerAccessibilityService : AccessibilityService() {
 
         @Volatile
         var lastExternalPackage: String? = null
+
+        @Volatile
+        var isMainControllerActive: Boolean = false
+
+        @Volatile
+        var isProUser: Boolean = (BuildConfig.FLAVOR != "playstore")
 
         // Duration of each continued-stroke segment while a held touch follows the trackpad
         private const val HELD_SEGMENT_MS = 16L
@@ -55,19 +64,148 @@ class ControllerAccessibilityService : AccessibilityService() {
     private var heldTargetY2 = 0f
     private var isDualHeldTouch = false
 
+    // Background Daily Preview Watchdog (keeps counting & enforcing when MainActivity is swiped away)
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    private var isWatchdogRunning = false
+    private var lastWatchdogBringDesktopMs: Long = 0L
+    private var watchdogDisplayListener: DisplayManager.DisplayListener? = null
+    private val watchdogRunnable = object : Runnable {
+        override fun run() {
+            if (isMainControllerActive || activeExternalDisplayId <= 0 || isProUser) {
+                isWatchdogRunning = false
+                return
+            }
+            checkBackgroundPreviewLimit()
+            watchdogHandler.postDelayed(this, 1000L)
+        }
+    }
+
+    fun startBackgroundPreviewWatchdog() {
+        if (isMainControllerActive || activeExternalDisplayId <= 0 || isProUser) return
+        if (isWatchdogRunning) return
+        isWatchdogRunning = true
+        watchdogHandler.removeCallbacks(watchdogRunnable)
+        watchdogHandler.postDelayed(watchdogRunnable, 1000L)
+    }
+
+    fun stopBackgroundPreviewWatchdog() {
+        isWatchdogRunning = false
+        watchdogHandler.removeCallbacks(watchdogRunnable)
+    }
+
+    private fun checkBackgroundPreviewLimit() {
+        val extId = activeExternalDisplayId
+        if (extId <= 0 || isProUser) {
+            stopBackgroundPreviewWatchdog()
+            return
+        }
+
+        val topExtPkg = getTopExternalApplicationPackage(extId)
+        if (!topExtPkg.isNullOrBlank()) {
+            if (topExtPkg == packageName) {
+                if (lastExternalPackage != packageName) {
+                    lastExternalPackage = packageName
+                    com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
+                }
+            } else if (topExtPkg != lastExternalPackage) {
+                lastExternalPackage = topExtPkg
+                com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, topExtPkg)
+            }
+        }
+
+        val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
+        if (isExhausted) {
+            val restrictedPkg = topExtPkg?.takeIf {
+                com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, it)
+            } ?: lastExternalPackage?.takeIf {
+                com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, it)
+            }
+
+            if (!restrictedPkg.isNullOrBlank()) {
+                try {
+                    com.xternal.control.media.MediaSessionRemoteManager.init(this)
+                        .forcePauseAllRestrictedSessions { it == restrictedPkg }
+                } catch (_: Throwable) {
+                }
+                bringDesktopToFrontFromService(extId, restrictedPkg)
+            }
+        }
+    }
+
+    private fun bringDesktopToFrontFromService(extId: Int, lockedPkg: String) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastWatchdogBringDesktopMs < 1200L) return
+        lastWatchdogBringDesktopMs = now
+        try {
+            lastExternalPackage = packageName
+            com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
+            val options = ActivityOptions.makeBasic()
+            options.launchDisplayId = extId
+            val label = try {
+                val pm = packageManager
+                pm.getApplicationLabel(pm.getApplicationInfo(lockedPkg, 0)).toString()
+            } catch (_: Exception) {
+                lockedPkg
+            }
+            val intent = Intent(this, ExternalActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra("EXTRA_SHOW_DAILY_LIMIT", true)
+                putExtra("EXTRA_LOCKED_APP_LABEL", label)
+            }
+            startActivity(intent, options.toBundle())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        try {
+            val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+            val listener = object : DisplayManager.DisplayListener {
+                override fun onDisplayAdded(displayId: Int) {}
+                override fun onDisplayChanged(displayId: Int) {}
+                override fun onDisplayRemoved(displayId: Int) {
+                    if (displayId == activeExternalDisplayId) {
+                        activeExternalDisplayId = -1
+                        lastExternalPackage = null
+                        com.xternal.control.billing.DailyAppPreviewManager.clearExternalSession()
+                        stopBackgroundPreviewWatchdog()
+                    }
+                }
+            }
+            watchdogDisplayListener = listener
+            dm.registerDisplayListener(listener, watchdogHandler)
+        } catch (_: Throwable) {
+        }
+        if (!isMainControllerActive && activeExternalDisplayId > 0) {
+            startBackgroundPreviewWatchdog()
+        }
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
+        stopBackgroundPreviewWatchdog()
+        watchdogDisplayListener?.let {
+            try {
+                (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).unregisterDisplayListener(it)
+            } catch (_: Throwable) {}
+            watchdogDisplayListener = null
+        }
         resetHeldTouch()
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         instance = null
+        stopBackgroundPreviewWatchdog()
+        watchdogDisplayListener?.let {
+            try {
+                (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).unregisterDisplayListener(it)
+            } catch (_: Throwable) {}
+            watchdogDisplayListener = null
+        }
         resetHeldTouch()
         super.onDestroy()
     }
@@ -122,18 +260,23 @@ class ControllerAccessibilityService : AccessibilityService() {
         // On Android 11+, check the actual topmost application window on the external display first.
         // This reliably catches apps launched from native App Drawer / Recents even if event.displayId is missing.
         if (currentExtId > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val topExtPkg = getTopExternalApplicationPackage(currentExtId)
-            if (!topExtPkg.isNullOrBlank()) {
-                if (topExtPkg == packageName) {
-                    if (lastExternalPackage != packageName) {
-                        lastExternalPackage = packageName
-                        InteractionBridge.sendDesktopForegroundState(true)
-                    }
-                } else if (topExtPkg != lastExternalPackage) {
-                    lastExternalPackage = topExtPkg
-                    InteractionBridge.sendForegroundPackageChanged(topExtPkg)
-                }
+            if (!isMainControllerActive && !isProUser) {
+                checkBackgroundPreviewLimit()
                 if (type == AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
+            } else {
+                val topExtPkg = getTopExternalApplicationPackage(currentExtId)
+                if (!topExtPkg.isNullOrBlank()) {
+                    if (topExtPkg == packageName) {
+                        if (lastExternalPackage != packageName) {
+                            lastExternalPackage = packageName
+                            InteractionBridge.sendDesktopForegroundState(true)
+                        }
+                    } else if (topExtPkg != lastExternalPackage) {
+                        lastExternalPackage = topExtPkg
+                        InteractionBridge.sendForegroundPackageChanged(topExtPkg)
+                    }
+                    if (type == AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
+                }
             }
         }
 

@@ -378,6 +378,7 @@ class MainActivity : AppCompatActivity() {
         loadInstalledApps()
 
         billingManager.initialize {
+            ControllerAccessibilityService.isProUser = isProActive()
             updateProUi()
             applyPlayStoreAppRestrictions()
             sortAndRefreshAppLists()
@@ -427,6 +428,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        ControllerAccessibilityService.isMainControllerActive = true
+        ControllerAccessibilityService.isProUser = isProActive()
+        ControllerAccessibilityService.instance?.stopBackgroundPreviewWatchdog()
         dailyPreviewHandler.removeCallbacks(dailyPreviewRunnable)
         dailyPreviewHandler.post(dailyPreviewRunnable)
         pendingProDialogMessage?.let { msg ->
@@ -3157,6 +3161,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        ControllerAccessibilityService.isMainControllerActive = false
+        ControllerAccessibilityService.isProUser = isProActive()
         super.onDestroy()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             audioPlaybackCallback?.let {
@@ -3177,5 +3183,12 @@ class MainActivity : AppCompatActivity() {
         // the display listener and the app-context cursor overlay or they pile up as phantom cursors
         displayListener?.let { displayManager.unregisterDisplayListener(it) }
         hideOverlayCursor()
+
+        // Option A: If external display is still connected when MainActivity is swiped away,
+        // hand off daily preview countdown & enforcement to ControllerAccessibilityService.
+        if (externalDisplayId != -1) {
+            ControllerAccessibilityService.activeExternalDisplayId = externalDisplayId
+            ControllerAccessibilityService.instance?.startBackgroundPreviewWatchdog()
+        }
     }
 }
