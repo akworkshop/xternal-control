@@ -143,7 +143,6 @@ class ExternalActivity : AppCompatActivity() {
 
         billingManager.initialize {
             updateDesktopSupportCard()
-            applyPlayStoreAppRestrictions()
             sortAndRefreshAppLists()
         }
 
@@ -173,7 +172,6 @@ class ExternalActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleDailyLimitIntent(intent)
-        applyPlayStoreAppRestrictions()
         sortAndRefreshAppLists()
     }
 
@@ -193,7 +191,6 @@ class ExternalActivity : AppCompatActivity() {
         systemTrayHandler.post(systemTrayRunnable)
         loadListsFromPreferences()
         updateDesktopSupportCard()
-        applyPlayStoreAppRestrictions()
         applyDesktopIconSize()
         sortAndRefreshAppLists()
         if (!isPipMode) {
@@ -422,7 +419,7 @@ class ExternalActivity : AppCompatActivity() {
         }
 
         allApps = appList
-        applyPlayStoreAppRestrictions()
+        com.xternal.control.billing.DailyAppPreviewManager.updateAppLockStates(this, allApps, isProActive())
 
         // 1. Desktop Icons Adapter: Arranges in columns from top to bottom, wrapping to multiple columns horizontally
         desktopAdapter = DesktopIconsAdapter(
@@ -506,31 +503,8 @@ class ExternalActivity : AppCompatActivity() {
         }
     }
 
-    private fun applyPlayStoreAppRestrictions() {
-        if (BuildConfig.FLAVOR != "playstore") {
-            for (app in allApps) {
-                app.isLocked = false
-            }
-            return
-        }
-
-        if (isProActive()) {
-            for (app in allApps) {
-                app.isLocked = false
-            }
-            return
-        }
-
-        val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)
-        for (app in allApps) {
-            val isRestricted = com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(app.packageName)
-            // If user still has daily preview minutes left, don't hard-lock the app icons
-            app.isLocked = isRestricted && isExhausted
-        }
-    }
-
     private fun sortAndRefreshAppLists() {
-        applyPlayStoreAppRestrictions()
+        com.xternal.control.billing.DailyAppPreviewManager.updateAppLockStates(this, allApps, isProActive())
         val updatedApps = allApps.map { app ->
             app.copy(
                 isFavourite = favouritePackages.contains(app.packageName),
@@ -714,7 +688,6 @@ class ExternalActivity : AppCompatActivity() {
 
         currentTrackedPackage = ""
         com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
-        applyPlayStoreAppRestrictions()
         sortAndRefreshAppLists()
     }
 

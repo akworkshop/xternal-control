@@ -33,53 +33,7 @@ class ControllerAccessibilityService : AccessibilityService() {
         var isMainControllerActive: Boolean = false
 
         @Volatile
-        var lastMainHeartbeatMs: Long = 0L
-
-        @Volatile
         var isProUser: Boolean = (BuildConfig.FLAVOR != "playstore")
-
-        private const val WATCHDOG_PREFS = "XternalControlWatchdogPrefs"
-        private const val KEY_EXT_DISPLAY_ID = "ext_display_id"
-        private const val KEY_IS_PRO_USER = "is_pro_user"
-
-        fun persistExternalDisplayState(context: Context, displayId: Int, isPro: Boolean) {
-            activeExternalDisplayId = displayId
-            isProUser = isPro
-            try {
-                context.getSharedPreferences(WATCHDOG_PREFS, Context.MODE_PRIVATE).edit()
-                    .putInt(KEY_EXT_DISPLAY_ID, displayId)
-                    .putBoolean(KEY_IS_PRO_USER, isPro)
-                    .apply()
-            } catch (_: Throwable) {
-            }
-        }
-
-        fun restoreExternalDisplayStateIfConnected(context: Context) {
-            try {
-                val prefs = context.getSharedPreferences(WATCHDOG_PREFS, Context.MODE_PRIVATE)
-                isProUser = if (BuildConfig.FLAVOR != "playstore") {
-                    true
-                } else {
-                    prefs.getBoolean(KEY_IS_PRO_USER, false)
-                }
-                val savedId = prefs.getInt(KEY_EXT_DISPLAY_ID, -1)
-                if (savedId > 0) {
-                    val dm = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
-                    if (dm?.getDisplay(savedId) != null) {
-                        activeExternalDisplayId = savedId
-                        return
-                    }
-                }
-                activeExternalDisplayId = -1
-            } catch (_: Throwable) {
-            }
-        }
-
-        fun isMainControllerAlive(): Boolean {
-            if (!isMainControllerActive) return false
-            val now = SystemClock.elapsedRealtime()
-            return (now - lastMainHeartbeatMs) in 0L..2500L
-        }
 
         // Duration of each continued-stroke segment while a held touch follows the trackpad
         private const val HELD_SEGMENT_MS = 16L
@@ -117,19 +71,17 @@ class ControllerAccessibilityService : AccessibilityService() {
     private var watchdogDisplayListener: DisplayManager.DisplayListener? = null
     private val watchdogRunnable = object : Runnable {
         override fun run() {
-            if (activeExternalDisplayId <= 0 || isProUser) {
+            if (isMainControllerActive || activeExternalDisplayId <= 0 || isProUser) {
                 isWatchdogRunning = false
                 return
             }
-            if (!isMainControllerAlive()) {
-                checkBackgroundPreviewLimit()
-            }
+            checkBackgroundPreviewLimit()
             watchdogHandler.postDelayed(this, 1000L)
         }
     }
 
     fun startBackgroundPreviewWatchdog() {
-        if (activeExternalDisplayId <= 0 || isProUser) return
+        if (isMainControllerActive || activeExternalDisplayId <= 0 || isProUser) return
         if (isWatchdogRunning) return
         isWatchdogRunning = true
         watchdogHandler.removeCallbacks(watchdogRunnable)
@@ -209,7 +161,6 @@ class ControllerAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        restoreExternalDisplayStateIfConnected(this)
         try {
             val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
             val listener = object : DisplayManager.DisplayListener {
@@ -217,7 +168,7 @@ class ControllerAccessibilityService : AccessibilityService() {
                 override fun onDisplayChanged(displayId: Int) {}
                 override fun onDisplayRemoved(displayId: Int) {
                     if (displayId == activeExternalDisplayId) {
-                        persistExternalDisplayState(this@ControllerAccessibilityService, -1, isProUser)
+                        activeExternalDisplayId = -1
                         lastExternalPackage = null
                         com.xternal.control.billing.DailyAppPreviewManager.clearExternalSession()
                         stopBackgroundPreviewWatchdog()
@@ -228,18 +179,7 @@ class ControllerAccessibilityService : AccessibilityService() {
             dm.registerDisplayListener(listener, watchdogHandler)
         } catch (_: Throwable) {
         }
-        if (activeExternalDisplayId > 0 && !isProUser) {
-            startBackgroundPreviewWatchdog()
-            if (!isMainControllerAlive()) {
-                checkBackgroundPreviewLimit()
-            }
-        }
-    }
-
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        super.onTaskRemoved(rootIntent)
-        restoreExternalDisplayStateIfConnected(this)
-        if (activeExternalDisplayId > 0 && !isProUser) {
+        if (!isMainControllerActive && activeExternalDisplayId > 0) {
             startBackgroundPreviewWatchdog()
         }
     }
@@ -320,7 +260,7 @@ class ControllerAccessibilityService : AccessibilityService() {
         // On Android 11+, check the actual topmost application window on the external display first.
         // This reliably catches apps launched from native App Drawer / Recents even if event.displayId is missing.
         if (currentExtId > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!isMainControllerAlive() && !isProUser) {
+            if (!isMainControllerActive && !isProUser) {
                 checkBackgroundPreviewLimit()
                 if (type == AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
             } else {

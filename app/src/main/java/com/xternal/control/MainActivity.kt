@@ -184,18 +184,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var hasTriggeredExpiryShield = false
+    private var hasHandledPreviewExpiry = false
     private var pendingProDialogMessage: String? = null
     private var activeProDialog: androidx.appcompat.app.AlertDialog? = null
     private var lastProDialogShownTimeMs: Long = 0L
 
+    private fun pauseAndReturnDesktop(pkg: String) {
+        if (::mediaRemoteManager.isInitialized && pkg.isNotBlank()) {
+            mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
+        }
+        bringDesktopToFront(pkg, showDialogOnPhone = true)
+    }
+
     private fun checkDailyAppPreviewLimit() {
         // If cable/glasses are disconnected, phone apps are 100% unrestricted
         if (externalDisplayId == -1) {
-            hasTriggeredExpiryShield = false
+            hasHandledPreviewExpiry = false
             return
         }
-        ControllerAccessibilityService.lastMainHeartbeatMs = android.os.SystemClock.elapsedRealtime()
         if (isProActive()) return
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
         if (isExhausted) {
@@ -204,13 +210,8 @@ class MainActivity : AppCompatActivity() {
             val topExtPkg = ControllerAccessibilityService.instance?.getTopExternalApplicationPackage(externalDisplayId)
             if (!topExtPkg.isNullOrBlank()) {
                 if (com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, topExtPkg)) {
-                    hasTriggeredExpiryShield = true
-                    if (::mediaRemoteManager.isInitialized) {
-                        mediaRemoteManager.forcePauseAllRestrictedSessions { pkg ->
-                            pkg == topExtPkg
-                        }
-                    }
-                    bringDesktopToFront(topExtPkg, showDialogOnPhone = true)
+                    hasHandledPreviewExpiry = true
+                    pauseAndReturnDesktop(topExtPkg)
                 } else if (topExtPkg == packageName) {
                     isDesktopActive = true
                 }
@@ -218,18 +219,13 @@ class MainActivity : AppCompatActivity() {
             }
 
             // Fallback when Accessibility window query is unavailable (Android < 11 or service off)
-            if (!hasTriggeredExpiryShield && !isDesktopActive) {
-                hasTriggeredExpiryShield = true
+            if (!hasHandledPreviewExpiry && !isDesktopActive) {
+                hasHandledPreviewExpiry = true
                 val targetPkg = lastLaunchedExternalPackage ?: com.xternal.control.billing.DailyAppPreviewManager.activeRestrictedPackage
-                if (::mediaRemoteManager.isInitialized && !targetPkg.isNullOrBlank()) {
-                    mediaRemoteManager.forcePauseAllRestrictedSessions { pkg ->
-                        pkg == targetPkg
-                    }
-                }
-                bringDesktopToFront(targetPkg, showDialogOnPhone = true)
+                pauseAndReturnDesktop(targetPkg ?: "")
             }
         } else {
-            hasTriggeredExpiryShield = false
+            hasHandledPreviewExpiry = false
         }
     }
 
@@ -381,7 +377,6 @@ class MainActivity : AppCompatActivity() {
         billingManager.initialize {
             ControllerAccessibilityService.isProUser = isProActive()
             updateProUi()
-            applyPlayStoreAppRestrictions()
             sortAndRefreshAppLists()
             checkAndShowTrialExpiredDialog()
         }
@@ -430,11 +425,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         ControllerAccessibilityService.isMainControllerActive = true
-        ControllerAccessibilityService.lastMainHeartbeatMs = android.os.SystemClock.elapsedRealtime()
-        ControllerAccessibilityService.persistExternalDisplayState(this, externalDisplayId, isProActive())
-        if (externalDisplayId != -1 && !isProActive()) {
-            ControllerAccessibilityService.instance?.startBackgroundPreviewWatchdog()
-        }
+        ControllerAccessibilityService.isProUser = isProActive()
+        ControllerAccessibilityService.instance?.stopBackgroundPreviewWatchdog()
         dailyPreviewHandler.removeCallbacks(dailyPreviewRunnable)
         dailyPreviewHandler.post(dailyPreviewRunnable)
         pendingProDialogMessage?.let { msg ->
@@ -451,7 +443,6 @@ class MainActivity : AppCompatActivity() {
         checkAndShowTrialExpiredDialog()
         updateProUi()
         updateDesktopIconSizeButtonsUi()
-        applyPlayStoreAppRestrictions()
         sortAndRefreshAppLists()
         if (::mediaRemoteManager.isInitialized) {
             mediaRemoteManager.refreshActiveSessions()
@@ -484,7 +475,7 @@ class MainActivity : AppCompatActivity() {
         // TEST ONLY: Long click status badge to reset daily 2-minute trial timer without clearing app data
         if (com.xternal.control.billing.DailyAppPreviewManager.FORCE_TEST_EXPIRED_TRIAL) {
             tvStatusBadge.setOnLongClickListener {
-                hasTriggeredExpiryShield = false
+                hasHandledPreviewExpiry = false
                 lastProDialogShownTimeMs = 0L
                 com.xternal.control.billing.DailyAppPreviewManager.resetForTest(this)
                 // Re-register any restricted app currently open on the external display so counting resumes immediately
@@ -494,7 +485,6 @@ class MainActivity : AppCompatActivity() {
                     com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, currentExtPkg)) {
                     com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, currentExtPkg)
                 }
-                applyPlayStoreAppRestrictions()
                 sortAndRefreshAppLists()
                 Toast.makeText(this, "🔄 TEST MODE: Daily 2-Min Preview Timer Reset!", Toast.LENGTH_LONG).show()
                 true
@@ -875,7 +865,7 @@ class MainActivity : AppCompatActivity() {
             apps.add(appInfo)
         }
         allApps = apps.distinctBy { it.packageName }
-        applyPlayStoreAppRestrictions()
+        com.xternal.control.billing.DailyAppPreviewManager.updateAppLockStates(this, allApps, isProActive())
 
         // Configure App Grid Adapter on Tablet/Phone
         appAdapter = AppListAdapter(
@@ -1073,10 +1063,7 @@ class MainActivity : AppCompatActivity() {
                 "Glasses display connected: ID $externalDisplayId (${targetDisplay.name})"
             }
             
-            ControllerAccessibilityService.persistExternalDisplayState(this, externalDisplayId, isProActive())
-            if (!isProActive()) {
-                ControllerAccessibilityService.instance?.startBackgroundPreviewWatchdog()
-            }
+            ControllerAccessibilityService.activeExternalDisplayId = externalDisplayId
             // Activate trackpad
             activateTrackpadMode()
             // Switch to APPS tab automatically
@@ -1123,8 +1110,7 @@ class MainActivity : AppCompatActivity() {
             tvStatusBadge.backgroundTintList = null
             tvConnectionInfo.text = "No physical external display found."
             deactivateTrackpadMode()
-            ControllerAccessibilityService.persistExternalDisplayState(this, -1, isProActive())
-            ControllerAccessibilityService.instance?.stopBackgroundPreviewWatchdog()
+            ControllerAccessibilityService.activeExternalDisplayId = -1
             com.xternal.control.billing.DailyAppPreviewManager.clearExternalSession()
         }
     }
@@ -2404,7 +2390,7 @@ class MainActivity : AppCompatActivity() {
             isDesktopActive = true
             lastLaunchedExternalPackage = null
             if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
-                hasTriggeredExpiryShield = true
+                hasHandledPreviewExpiry = true
             }
             val options = ActivityOptions.makeBasic()
             options.launchDisplayId = externalDisplayId
@@ -2434,7 +2420,6 @@ class MainActivity : AppCompatActivity() {
                 pendingProDialogMessage = msg
             }
         }
-        applyPlayStoreAppRestrictions()
         sortAndRefreshAppLists()
     }
 
@@ -2481,7 +2466,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun sortAndRefreshAppLists() {
-        applyPlayStoreAppRestrictions()
+        com.xternal.control.billing.DailyAppPreviewManager.updateAppLockStates(this, allApps, isProActive())
         // Filter apps based on search query
         val filteredApps = if (appSearchQuery.isEmpty()) {
             allApps
@@ -2542,29 +2527,6 @@ class MainActivity : AppCompatActivity() {
         }
         saveListsToPreferences()
         sortAndRefreshAppLists()
-    }
-
-    private fun applyPlayStoreAppRestrictions() {
-        if (BuildConfig.FLAVOR != "playstore") {
-            for (app in allApps) {
-                app.isLocked = false
-            }
-            return
-        }
-
-        if (isProActive()) {
-            for (app in allApps) {
-                app.isLocked = false
-            }
-            return
-        }
-
-        val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)
-        for (app in allApps) {
-            val isRestricted = com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(app.packageName)
-            // If user still has daily preview minutes left, allow launching without padlock
-            app.isLocked = isRestricted && isExhausted
-        }
     }
 
     private fun showProUpgradeDialog(
@@ -2770,10 +2732,7 @@ class MainActivity : AppCompatActivity() {
                             } else if (!isProActive() && com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, pkg)) {
                                 if (com.xternal.control.billing.DailyAppPreviewManager.isDailyPreviewExhausted(this)) {
                                     // Scenario 3: Locked restricted app opened while expired -> pause audio and immediately bring desktop to front
-                                    if (::mediaRemoteManager.isInitialized) {
-                                        mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
-                                    }
-                                    bringDesktopToFront(pkg, showDialogOnPhone = true)
+                                    pauseAndReturnDesktop(pkg)
                                 } else {
                                     // Still has preview time left -> track time
                                     isDesktopActive = false
@@ -2810,7 +2769,6 @@ class MainActivity : AppCompatActivity() {
                 if (isForeground) {
                     lastLaunchedExternalPackage = null
                     com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
-                    applyPlayStoreAppRestrictions()
                     sortAndRefreshAppLists()
                     activeMediaPackage = packageName
                     if (::mediaRemoteManager.isInitialized) {
@@ -3170,8 +3128,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         ControllerAccessibilityService.isMainControllerActive = false
-        ControllerAccessibilityService.lastMainHeartbeatMs = 0L
-        ControllerAccessibilityService.persistExternalDisplayState(this, externalDisplayId, isProActive())
+        ControllerAccessibilityService.isProUser = isProActive()
         super.onDestroy()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             audioPlaybackCallback?.let {

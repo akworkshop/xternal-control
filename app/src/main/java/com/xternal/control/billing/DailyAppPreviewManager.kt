@@ -56,7 +56,6 @@ object DailyAppPreviewManager {
         "com.android.systemui",
         "com.google.android.packageinstaller",
         "com.android.permissioncontroller",
-        "com.google.android.permissioncontroller",
         "com.google.android.inputmethod.latin",
         "com.samsung.android.honeyboard",
         "com.touchtype.swiftkey",
@@ -158,15 +157,20 @@ object DailyAppPreviewManager {
         }
     }
 
-    @Synchronized
-    fun isSystemOrImePackage(context: Context, packageName: String): Boolean {
+    private fun isSystemOrImePackageInternal(packageName: String): Boolean {
         if (packageName.isBlank()) return true
-        refreshImePackages(context)
         if (packageName == "android" || packageName.startsWith("com.android.systemui") || packageName.contains("systemui")) return true
         if (packageName.contains("launcher") || packageName.contains("home")) return true
         if (SYSTEM_PACKAGES.contains(packageName)) return true
         if (cachedImePackages.contains(packageName)) return true
         return false
+    }
+
+    @Synchronized
+    fun isSystemOrImePackage(context: Context, packageName: String): Boolean {
+        if (packageName.isBlank()) return true
+        refreshImePackages(context)
+        return isSystemOrImePackageInternal(packageName)
     }
 
     @Synchronized
@@ -180,11 +184,29 @@ object DailyAppPreviewManager {
         if (packageName.isBlank()) return false
         // Xternal Control itself is ALWAYS whitelisted so it can never lock itself
         if (packageName == "com.xternal.control" || packageName.startsWith("com.xternal.control.")) return false
-        if (packageName == "android" || packageName.startsWith("com.android.systemui")) return false
-        if (packageName.contains("launcher") || packageName.contains("home")) return false
-        if (SYSTEM_PACKAGES.contains(packageName)) return false
-        if (cachedImePackages.contains(packageName)) return false
+        if (isSystemOrImePackageInternal(packageName)) return false
         return !WHITELISTED_PACKAGES.contains(packageName)
+    }
+
+    @Synchronized
+    fun updateAppLockStates(
+        context: Context,
+        apps: List<com.xternal.control.AppInfo>,
+        isProActive: Boolean
+    ) {
+        val shouldLockRestricted = (com.xternal.control.BuildConfig.FLAVOR == "playstore") &&
+            !isProActive &&
+            isDailyPreviewExhausted(context)
+        if (!shouldLockRestricted) {
+            for (app in apps) {
+                app.isLocked = false
+            }
+            return
+        }
+        refreshImePackages(context)
+        for (app in apps) {
+            app.isLocked = isRestrictedApp(app.packageName)
+        }
     }
 
     @Synchronized
