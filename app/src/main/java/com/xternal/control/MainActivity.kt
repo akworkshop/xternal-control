@@ -195,6 +195,7 @@ class MainActivity : AppCompatActivity() {
             hasTriggeredExpiryShield = false
             return
         }
+        ControllerAccessibilityService.lastMainHeartbeatMs = android.os.SystemClock.elapsedRealtime()
         if (isProActive()) return
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
         if (isExhausted) {
@@ -429,8 +430,11 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         ControllerAccessibilityService.isMainControllerActive = true
-        ControllerAccessibilityService.isProUser = isProActive()
-        ControllerAccessibilityService.instance?.stopBackgroundPreviewWatchdog()
+        ControllerAccessibilityService.lastMainHeartbeatMs = android.os.SystemClock.elapsedRealtime()
+        ControllerAccessibilityService.persistExternalDisplayState(this, externalDisplayId, isProActive())
+        if (externalDisplayId != -1 && !isProActive()) {
+            ControllerAccessibilityService.instance?.startBackgroundPreviewWatchdog()
+        }
         dailyPreviewHandler.removeCallbacks(dailyPreviewRunnable)
         dailyPreviewHandler.post(dailyPreviewRunnable)
         pendingProDialogMessage?.let { msg ->
@@ -1069,7 +1073,10 @@ class MainActivity : AppCompatActivity() {
                 "Glasses display connected: ID $externalDisplayId (${targetDisplay.name})"
             }
             
-            ControllerAccessibilityService.activeExternalDisplayId = externalDisplayId
+            ControllerAccessibilityService.persistExternalDisplayState(this, externalDisplayId, isProActive())
+            if (!isProActive()) {
+                ControllerAccessibilityService.instance?.startBackgroundPreviewWatchdog()
+            }
             // Activate trackpad
             activateTrackpadMode()
             // Switch to APPS tab automatically
@@ -1116,7 +1123,8 @@ class MainActivity : AppCompatActivity() {
             tvStatusBadge.backgroundTintList = null
             tvConnectionInfo.text = "No physical external display found."
             deactivateTrackpadMode()
-            ControllerAccessibilityService.activeExternalDisplayId = -1
+            ControllerAccessibilityService.persistExternalDisplayState(this, -1, isProActive())
+            ControllerAccessibilityService.instance?.stopBackgroundPreviewWatchdog()
             com.xternal.control.billing.DailyAppPreviewManager.clearExternalSession()
         }
     }
@@ -3162,7 +3170,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         ControllerAccessibilityService.isMainControllerActive = false
-        ControllerAccessibilityService.isProUser = isProActive()
+        ControllerAccessibilityService.lastMainHeartbeatMs = 0L
+        ControllerAccessibilityService.persistExternalDisplayState(this, externalDisplayId, isProActive())
         super.onDestroy()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             audioPlaybackCallback?.let {
