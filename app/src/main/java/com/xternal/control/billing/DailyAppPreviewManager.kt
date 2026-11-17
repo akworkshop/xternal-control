@@ -23,11 +23,10 @@ object DailyAppPreviewManager {
     private const val KEY_LAST_REALTIME = "daily_preview_last_realtime"
     private const val KEY_LAST_WALL_TIME = "daily_preview_last_wall_time"
 
-    // TEST BUILD: 2 minutes (120 seconds). For release, this will be 600 seconds (10 mins).
-    // TEST FLAG: When true, simulates expired trial for Option B preview testing
-    const val FORCE_TEST_EXPIRED_TRIAL = true
+    // Production daily preview limit: 6 minutes (360 seconds)
+    const val FORCE_TEST_EXPIRED_TRIAL = false
 
-    const val DAILY_LIMIT_SECONDS = 120
+    const val DAILY_LIMIT_SECONDS = 360
 
     // Standard Whitelisted packages that are ALWAYS 100% free with unlimited time
     val WHITELISTED_PACKAGES = setOf(
@@ -295,16 +294,5 @@ object DailyAppPreviewManager {
             .putLong(KEY_LAST_REALTIME, SystemClock.elapsedRealtime())
             .putLong(KEY_LAST_WALL_TIME, System.currentTimeMillis())
             .apply()
-    }
-
-    /**
-     * Test Helper: Resets daily usage counter
-     */
-    @Synchronized
-    fun resetForTest(context: Context) {
-        activeExternalRestrictedPackages.clear()
-        activeRestrictedPackage = null
-        lastTrackingRealtimeMs = 0L
-        getPrefs(context).edit().clear().apply()
     }
 }

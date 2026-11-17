@@ -101,9 +101,18 @@ class ControllerAccessibilityService : AccessibilityService() {
         }
 
         val topExtPkg = getTopExternalApplicationPackage(extId)
+        val playingExtPkg = com.xternal.control.media.MediaSessionRemoteManager.init(this)
+            .getPlayingPackageInSet(com.xternal.control.billing.DailyAppPreviewManager.activeExternalRestrictedPackages)
+
         if (!topExtPkg.isNullOrBlank()) {
             if (topExtPkg == packageName) {
-                if (lastExternalPackage != packageName) {
+                if (playingExtPkg != null) {
+                    // External restricted app (e.g. Apple TV PiP) is still actively playing on top of Desktop
+                    lastExternalPackage = playingExtPkg
+                    if (com.xternal.control.billing.DailyAppPreviewManager.activeRestrictedPackage == null) {
+                        com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, playingExtPkg)
+                    }
+                } else if (lastExternalPackage != packageName) {
                     lastExternalPackage = packageName
                     com.xternal.control.billing.DailyAppPreviewManager.onAppBackgrounded(this)
                 }
@@ -111,11 +120,15 @@ class ControllerAccessibilityService : AccessibilityService() {
                 lastExternalPackage = topExtPkg
                 com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, topExtPkg)
             }
+        } else if (playingExtPkg != null && com.xternal.control.billing.DailyAppPreviewManager.activeRestrictedPackage == null) {
+            // DRM / PiP window hid root package name, but external restricted media is actively playing
+            lastExternalPackage = playingExtPkg
+            com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, playingExtPkg)
         }
 
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
         if (isExhausted) {
-            val restrictedPkg = topExtPkg?.takeIf {
+            val restrictedPkg = playingExtPkg ?: topExtPkg?.takeIf {
                 com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, it)
             } ?: lastExternalPackage?.takeIf {
                 com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, it)
@@ -124,7 +137,10 @@ class ControllerAccessibilityService : AccessibilityService() {
             if (!restrictedPkg.isNullOrBlank()) {
                 try {
                     com.xternal.control.media.MediaSessionRemoteManager.init(this)
-                        .forcePauseAllRestrictedSessions { it == restrictedPkg }
+                        .forcePauseAllRestrictedSessions { sessionPkg ->
+                            sessionPkg == restrictedPkg ||
+                                com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(sessionPkg)
+                        }
                 } catch (_: Throwable) {
                 }
                 bringDesktopToFrontFromService(extId, restrictedPkg)
@@ -153,6 +169,23 @@ class ControllerAccessibilityService : AccessibilityService() {
                 putExtra("EXTRA_LOCKED_APP_LABEL", label)
             }
             startActivity(intent, options.toBundle())
+
+            // Stagger Display 0 launch by 350ms so Display 1 finishes rendering ExternalActivity
+            // before Display 0 steals the window transition.
+            watchdogHandler.postDelayed({
+                try {
+                    val phoneOptions = ActivityOptions.makeBasic().apply {
+                        launchDisplayId = android.view.Display.DEFAULT_DISPLAY
+                    }
+                    val phoneIntent = Intent(this, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("EXTRA_LOCKED_APP_LABEL", label)
+                    }
+                    startActivity(phoneIntent, phoneOptions.toBundle())
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }, 350L)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -224,15 +257,26 @@ class ControllerAccessibilityService : AccessibilityService() {
                 val displayWindows = windowsOnAllDisplays.get(displayId) ?: return null
                 var topLayer = Int.MIN_VALUE
                 var topPkg: String? = null
+                var highestOpaqueAppLayer = Int.MIN_VALUE
                 for (win in displayWindows) {
                     if (win.type != AccessibilityWindowInfo.TYPE_APPLICATION) continue
                     val pkg = win.root?.packageName?.toString()
-                    if (pkg.isNullOrBlank()) continue
+                    if (pkg.isNullOrBlank()) {
+                        // A DRM / PiP / SurfaceView application window may have a null root;
+                        // track its layer so we don't falsely treat Desktop underneath as topmost.
+                        if (win.layer > highestOpaqueAppLayer) {
+                            highestOpaqueAppLayer = win.layer
+                        }
+                        continue
+                    }
                     if (com.xternal.control.billing.DailyAppPreviewManager.isSystemOrImePackage(this, pkg)) continue
                     if (win.layer >= topLayer) {
                         topLayer = win.layer
                         topPkg = pkg
                     }
+                }
+                if (topPkg == packageName && highestOpaqueAppLayer > topLayer) {
+                    return null
                 }
                 return topPkg
             } catch (_: Throwable) {

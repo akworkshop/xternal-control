@@ -415,6 +415,25 @@ class MediaSessionRemoteManager private constructor(private val context: Context
         return false
     }
 
+    fun getPlayingPackageInSet(packages: Set<String>): String? {
+        if (packages.isEmpty()) return null
+        try {
+            if (!isNotificationAccessGranted() || mediaSessionManager == null) return null
+            val componentName = MediaNotificationListenerService.getComponentName(context)
+            val controllers = mediaSessionManager.getActiveSessions(componentName)
+            for (controller in controllers) {
+                val pkg = controller.packageName ?: continue
+                if (!packages.contains(pkg)) continue
+                val state = controller.playbackState?.state
+                if (state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING) {
+                    return pkg
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return null
+    }
+
     fun forcePauseAllRestrictedSessions(restrictedPackageCheck: (String) -> Boolean) {
         try {
             if (!isNotificationAccessGranted() || mediaSessionManager == null) {

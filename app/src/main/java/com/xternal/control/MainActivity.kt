@@ -190,8 +190,11 @@ class MainActivity : AppCompatActivity() {
     private var lastProDialogShownTimeMs: Long = 0L
 
     private fun pauseAndReturnDesktop(pkg: String) {
-        if (::mediaRemoteManager.isInitialized && pkg.isNotBlank()) {
-            mediaRemoteManager.forcePauseAllRestrictedSessions { it == pkg }
+        if (::mediaRemoteManager.isInitialized) {
+            mediaRemoteManager.forcePauseAllRestrictedSessions { sessionPkg ->
+                (pkg.isNotBlank() && sessionPkg == pkg) ||
+                    com.xternal.control.billing.DailyAppPreviewManager.isPackageInExternalRestrictedSet(sessionPkg)
+            }
         }
         bringDesktopToFront(pkg, showDialogOnPhone = true)
     }
@@ -203,11 +206,27 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (isProActive()) return
+
+        val playingExtPkg = if (::mediaRemoteManager.isInitialized) {
+            mediaRemoteManager.getPlayingPackageInSet(
+                com.xternal.control.billing.DailyAppPreviewManager.activeExternalRestrictedPackages
+            )
+        } else null
+
+        if (playingExtPkg != null && com.xternal.control.billing.DailyAppPreviewManager.activeRestrictedPackage == null) {
+            com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, playingExtPkg)
+        }
+
         val isExhausted = com.xternal.control.billing.DailyAppPreviewManager.onTick(this)
         if (isExhausted) {
             // Safety-net check: inspect actual topmost window on external display (Android 11+)
-            // Catches restricted apps re-opened via native App Drawer / Recents
+            // Catches restricted apps re-opened via native App Drawer / Recents or PiP
             val topExtPkg = ControllerAccessibilityService.instance?.getTopExternalApplicationPackage(externalDisplayId)
+            if (playingExtPkg != null) {
+                hasHandledPreviewExpiry = true
+                pauseAndReturnDesktop(playingExtPkg)
+                return
+            }
             if (!topExtPkg.isNullOrBlank()) {
                 if (com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, topExtPkg)) {
                     hasHandledPreviewExpiry = true
@@ -218,7 +237,7 @@ class MainActivity : AppCompatActivity() {
                 return
             }
 
-            // Fallback when Accessibility window query is unavailable (Android < 11 or service off)
+            // Fallback when Accessibility window query is unavailable (Android < 11 or DRM root is null)
             if (!hasHandledPreviewExpiry && !isDesktopActive) {
                 hasHandledPreviewExpiry = true
                 val targetPkg = lastLaunchedExternalPackage ?: com.xternal.control.billing.DailyAppPreviewManager.activeRestrictedPackage
@@ -413,6 +432,11 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         wasBackgrounded = true
+        ControllerAccessibilityService.isMainControllerActive = false
+        if (externalDisplayId != -1 && !isProActive()) {
+            ControllerAccessibilityService.activeExternalDisplayId = externalDisplayId
+            ControllerAccessibilityService.instance?.startBackgroundPreviewWatchdog()
+        }
         try {
             // Clear FLAG_NOT_FOCUSABLE when leaving MainActivity so that upon returning,
             // MainActivity can cleanly reclaim window focus on the phone display and hand it back to the external display.
@@ -472,24 +496,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun initViews() {
         tvStatusBadge = findViewById(R.id.tvStatusBadge)
-        // TEST ONLY: Long click status badge to reset daily 2-minute trial timer without clearing app data
-        if (com.xternal.control.billing.DailyAppPreviewManager.FORCE_TEST_EXPIRED_TRIAL) {
-            tvStatusBadge.setOnLongClickListener {
-                hasHandledPreviewExpiry = false
-                lastProDialogShownTimeMs = 0L
-                com.xternal.control.billing.DailyAppPreviewManager.resetForTest(this)
-                // Re-register any restricted app currently open on the external display so counting resumes immediately
-                val currentExtPkg = ControllerAccessibilityService.instance?.getTopExternalApplicationPackage(externalDisplayId)
-                    ?: lastLaunchedExternalPackage
-                if (!currentExtPkg.isNullOrBlank() && currentExtPkg != packageName &&
-                    com.xternal.control.billing.DailyAppPreviewManager.isRestrictedApp(this, currentExtPkg)) {
-                    com.xternal.control.billing.DailyAppPreviewManager.onAppForegrounded(this, currentExtPkg)
-                }
-                sortAndRefreshAppLists()
-                Toast.makeText(this, "🔄 TEST MODE: Daily 2-Min Preview Timer Reset!", Toast.LENGTH_LONG).show()
-                true
-            }
-        }
         tvConnectionInfo = findViewById(R.id.tvConnectionInfo)
         tvPermOverlay = findViewById(R.id.tvPermOverlay)
         btnGrantOverlay = findViewById(R.id.btnGrantOverlay)
@@ -2413,12 +2419,33 @@ class MainActivity : AppCompatActivity() {
                 val app = allApps.find { it.packageName == lockedPkg }
                 app?.label ?: lockedPkg
             } else "This app"
-            val msg = "⏳ Daily Free Preview Ended (2 mins).\n\nYou have used today's free preview allowance for $appLabel.\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!"
+            val msg = "⏳ Daily Free Preview Ended (6 mins).\n\nYou have used today's free preview allowance for $appLabel.\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!"
             if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
                 showProUpgradeDialog(msg)
             } else {
                 pendingProDialogMessage = msg
             }
+        }
+        // If the user switched to the phone's native launcher/Recents or minimized Xternal Control,
+        // stagger bringing MainActivity back to Display 0 by 350ms so Display 1 finishes rendering Desktop first.
+        if (showDialogOnPhone && !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && !isFinishing && !isDestroyed) {
+            dailyPreviewHandler.postDelayed({
+                if (isFinishing || isDestroyed || lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                    return@postDelayed
+                }
+                try {
+                    val phoneOptions = ActivityOptions.makeBasic().apply {
+                        launchDisplayId = Display.DEFAULT_DISPLAY
+                    }
+                    val phoneIntent = Intent(this, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    }
+                    val launcherContext: Context = ControllerAccessibilityService.instance ?: this
+                    launcherContext.startActivity(phoneIntent, phoneOptions.toBundle())
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }, 350L)
         }
         sortAndRefreshAppLists()
     }
@@ -3122,7 +3149,22 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent?.getBooleanExtra("EXTRA_TRIGGER_PURCHASE", false) == true) {
+            intent.removeExtra("EXTRA_TRIGGER_PURCHASE")
             showProUpgradeDialog()
+        } else {
+            val lockedLabel = intent?.getStringExtra("EXTRA_LOCKED_APP_LABEL")
+            if (!lockedLabel.isNullOrBlank()) {
+                intent.removeExtra("EXTRA_LOCKED_APP_LABEL")
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - lastProDialogShownTimeMs >= 10_000L) {
+                    val msg = "⏳ Daily Free Preview Ended (6 mins).\n\nYou have used today's free preview allowance for $lockedLabel.\n\nUpgrade to Pro (Lifetime) for unlimited access to all apps!"
+                    if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                        showProUpgradeDialog(msg)
+                    } else {
+                        pendingProDialogMessage = msg
+                    }
+                }
+            }
         }
     }
 

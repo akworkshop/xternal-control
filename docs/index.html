@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xternal Control — External Display Desktop &amp; XR Smart Glasses Controller</title>
+  <meta name="description" content="Transform any Android phone or tablet into a native 16:9 desktop workspace, multi-touch trackpad, and universal media controller for external monitors, TVs, and XR/AR smart glasses." />
+  <style>
+    :root {
+      --bg: #05070b;
+      --card: #0f141d;
+      --border: #1e293b;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.12);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem 1.25rem 4rem;
+    }
+    .container { max-width: 860px; margin: 0 auto; }
+    header {
+      padding: 2.5rem 0 2rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2rem;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      margin-bottom: 1rem;
+    }
+    h1 { font-size: 2.25rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.75rem; }
+    .subtitle { color: var(--muted); font-size: 1.08rem; max-width: 660px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
+    .btn {
+      display: inline-block;
+      padding: 0.65rem 1.15rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      text-decoration: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      background: var(--card);
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #031019;
+      border-color: var(--accent);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2.25rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .card h2 { font-size: 1.05rem; margin-bottom: 0.45rem; color: #f8fafc; }
+    .card p { font-size: 0.93rem; color: var(--muted); }
+    section { margin-bottom: 2rem; }
+    h3 { font-size: 1.2rem; margin-bottom: 0.75rem; color: #f8fafc; }
+    ul { padding-left: 1.25rem; color: var(--muted); }
+    li { margin-bottom: 0.4rem; }
+    a { color: var(--accent); }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.88rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge">Android Productivity &amp; XR Smart Glasses</div>
+      <h1>Xternal Control</h1>
+      <p class="subtitle">
+        Transform any Android phone or tablet into a native 16:9 widescreen desktop workspace,
+        precision multi-touch trackpad, and universal media controller for external monitors,
+        TVs, and XR/AR smart glasses (XREAL, Rokid, RayNeo, Viture).
+      </p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/akworkshop/xternal-control/releases">Download / Releases</a>
+        <a class="btn" href="https://github.com/akworkshop/xternal-control">GitHub Repository</a>
+        <a class="btn" href="./privacy.html">Privacy Policy</a>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <h2>True 16:9 Native Desktop</h2>
+        <p>Launches apps directly onto connected external displays without phone aspect-ratio black pillar bars.</p>
+      </div>
+      <div class="card">
+        <h2>XR / AR Glasses Ready</h2>
+        <p>Low-latency cursor pass-through, high refresh-rate support, and True Black (#000000) OLED theater mode.</p>
+      </div>
+      <div class="card">
+        <h2>Multi-Touch Trackpad</h2>
+        <p>Two-finger scroll, pinch-to-zoom, tap-to-click, drag gestures, and non-blocking keyboard input.</p>
+      </div>
+      <div class="card">
+        <h2>Universal Media Remote</h2>
+        <p>Controls active playback sessions across displays without stealing window focus from streaming apps.</p>
+      </div>
+    </div>
+
+    <section>
+      <h3>Developer &amp; Support Contact</h3>
+      <ul>
+        <li><strong>Developer:</strong> AK Workshop</li>
+        <li><strong>App Name:</strong> Xternal Control</li>
+        <li><strong>Support &amp; Issue Tracker:</strong> <a href="https://github.com/akworkshop/xternal-control/issues">github.com/akworkshop/xternal-control/issues</a></li>
+        <li><strong>Privacy Policy:</strong> <a href="./privacy.html">Xternal Control Privacy Policy</a></li>
+      </ul>
+    </section>
+
+    <footer>
+      <span>&copy; 2026 AK Workshop. All rights reserved.</span>
+      <span><a href="./privacy.html">Privacy Policy</a></span>
+    </footer>
+  </div>
+</body>
+</html>
