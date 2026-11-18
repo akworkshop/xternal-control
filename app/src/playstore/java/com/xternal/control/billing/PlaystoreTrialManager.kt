@@ -38,6 +38,8 @@ class PlaystoreTrialManager(private val context: Context) {
     private var lastRecordedTime: Long = 0L
     private var isTampered: Boolean = false
 
+    private data class TrialToken(val start: Long, val lastSeen: Long, val epoch: Int)
+
     companion object {
         const val TRIAL_DURATION_MS = 2 * 24 * 60 * 60 * 1000L // 48 Hours
 
@@ -139,14 +141,22 @@ class PlaystoreTrialManager(private val context: Context) {
     @Synchronized
     private fun loadOrInitializeTrial() {
         val now = System.currentTimeMillis()
-        val currentEpoch = prefs.getInt(KEY_TRIAL_EPOCH, 1)
         val currentMajorMinor = getMajorMinorVersion()
         val savedMajorMinor = prefs.getString(KEY_LAST_TRIAL_MAJOR_MINOR, "") ?: ""
 
+        // Read persistent tokens first so "Clear Data" / reinstall does not get misidentified as an Epoch 1 upgrade
+        val persistentTokens = readAllPersistentTrialTokens()
+        val hasPrefsEpoch = prefs.contains(KEY_TRIAL_EPOCH)
+        val effectiveEpoch = when {
+            hasPrefsEpoch -> prefs.getInt(KEY_TRIAL_EPOCH, CURRENT_TRIAL_EPOCH)
+            persistentTokens.isNotEmpty() -> persistentTokens.maxOf { it.epoch }
+            else -> CURRENT_TRIAL_EPOCH
+        }
+
         // Check if a trial reset should be granted:
-        // 1. Explicit epoch bump (e.g. v1.5.3 = Epoch 3)
+        // 1. Explicit epoch bump (e.g. upgrading from an older epoch < CURRENT_TRIAL_EPOCH)
         // 2. Automatic major/minor version change (e.g. 1.5 -> 1.6, 2.0)
-        val shouldResetEpoch = CURRENT_TRIAL_EPOCH > currentEpoch
+        val shouldResetEpoch = CURRENT_TRIAL_EPOCH > effectiveEpoch
         val shouldResetMajorMinor = savedMajorMinor.isNotEmpty() && isNewerMajorMinor(currentMajorMinor, savedMajorMinor)
 
         if (shouldResetEpoch || shouldResetMajorMinor) {
@@ -168,10 +178,10 @@ class PlaystoreTrialManager(private val context: Context) {
             return
         }
 
-        // Ensure current epoch and version are recorded on first install
-        if (!prefs.contains(KEY_TRIAL_EPOCH)) {
+        // Ensure current epoch and version are recorded in SharedPreferences (on first install or after Clear Data)
+        if (!hasPrefsEpoch) {
             prefs.edit()
-                .putInt(KEY_TRIAL_EPOCH, CURRENT_TRIAL_EPOCH)
+                .putInt(KEY_TRIAL_EPOCH, effectiveEpoch)
                 .putString(KEY_LAST_TRIAL_MAJOR_MINOR, currentMajorMinor)
                 .apply()
         }
@@ -185,9 +195,6 @@ class PlaystoreTrialManager(private val context: Context) {
         val localStart = prefs.getLong(KEY_TRIAL_START, 0L)
         val localLastSeen = prefs.getLong(KEY_TRIAL_LAST_SEEN, 0L)
 
-        // 2. Read from persistent storages (MediaStore & Public Shared Folders)
-        val persistentTokens = readAllPersistentTrialTokens()
-
         var finalStart = 0L
         var finalLastSeen = 0L
 
@@ -200,8 +207,8 @@ class PlaystoreTrialManager(private val context: Context) {
         }
 
         for (token in persistentTokens) {
-            allStarts.add(token.first)
-            allLastSeens.add(token.second)
+            allStarts.add(token.start)
+            allLastSeens.add(token.lastSeen)
         }
 
         // If a trial reset was previously granted at epochResetTime, ignore tokens from before the reset
@@ -315,8 +322,8 @@ class PlaystoreTrialManager(private val context: Context) {
     // Persistent Multi-Layer Storage (Survives "Clear Data")
     // ---------------------------------------------------------
 
-    private fun readAllPersistentTrialTokens(): List<Pair<Long, Long>> {
-        val results = mutableListOf<Pair<Long, Long>>()
+    private fun readAllPersistentTrialTokens(): List<TrialToken> {
+        val results = mutableListOf<TrialToken>()
 
         // Location 1: MediaStore Downloads (.xternal, xternal, and legacy root)
         readMediaStoreToken(MediaStore.Downloads.EXTERNAL_CONTENT_URI, FILE_NAME_DOWNLOAD, "Download/$SUBDIR_HIDDEN/")?.let { results.add(it) }
@@ -351,7 +358,7 @@ class PlaystoreTrialManager(private val context: Context) {
     }
 
     private fun writeAllPersistentTrialTokens(startTime: Long, lastSeen: Long) {
-        val payload = "$startTime:$lastSeen:${getDeviceId()}"
+        val payload = "$startTime:$lastSeen:${getDeviceId()}:$CURRENT_TRIAL_EPOCH"
         val signature = generateHmac(payload)
         val content = "$payload:$signature"
 
@@ -386,7 +393,7 @@ class PlaystoreTrialManager(private val context: Context) {
     // MediaStore Helper
     // ---------------------------------------------------------
 
-    private fun readMediaStoreToken(baseUri: Uri, fileName: String, relativePathPrefix: String? = null): Pair<Long, Long>? {
+    private fun readMediaStoreToken(baseUri: Uri, fileName: String, relativePathPrefix: String? = null): TrialToken? {
         return try {
             val projection = arrayOf(MediaStore.MediaColumns._ID)
             val selection: String
@@ -512,7 +519,7 @@ class PlaystoreTrialManager(private val context: Context) {
     // Direct File System Fallback
     // ---------------------------------------------------------
 
-    private fun readDirectFileToken(directoryType: String, fileName: String): Pair<Long, Long>? {
+    private fun readDirectFileToken(directoryType: String, fileName: String): TrialToken? {
         return try {
             val publicDir = Environment.getExternalStoragePublicDirectory(directoryType)
             if (publicDir.exists()) {
@@ -526,7 +533,7 @@ class PlaystoreTrialManager(private val context: Context) {
         }
     }
 
-    private fun readDirectPathToken(absolutePath: String): Pair<Long, Long>? {
+    private fun readDirectPathToken(absolutePath: String): TrialToken? {
         return try {
             val file = File(absolutePath)
             if (file.exists() && file.canRead()) {
@@ -563,7 +570,7 @@ class PlaystoreTrialManager(private val context: Context) {
         }
     }
 
-    private fun parseToken(inputStream: InputStream): Pair<Long, Long>? {
+    private fun parseToken(inputStream: InputStream): TrialToken? {
         return try {
             val byteBuffer = ByteArrayOutputStream()
             val buffer = ByteArray(1024)
@@ -573,27 +580,49 @@ class PlaystoreTrialManager(private val context: Context) {
             }
             val raw = String(byteBuffer.toByteArray(), StandardCharsets.UTF_8).trim()
             val parts = raw.split(":")
-            if (parts.size == 4) {
-                val start = parts[0].toLongOrNull() ?: return null
-                val lastSeen = parts[1].toLongOrNull() ?: return null
-                val deviceId = parts[2]
-                val expectedSignature = parts[3]
+            when (parts.size) {
+                5 -> {
+                    val start = parts[0].toLongOrNull() ?: return null
+                    val lastSeen = parts[1].toLongOrNull() ?: return null
+                    val deviceId = parts[2]
+                    val epoch = parts[3].toIntOrNull() ?: return null
+                    val expectedSignature = parts[4]
 
-                // Verify device ID matches this physical device
-                if (deviceId != getDeviceId()) {
-                    Log.w(tag, "Trial token device ID mismatch!")
-                    return null
+                    if (deviceId != getDeviceId()) {
+                        Log.w(tag, "Trial token device ID mismatch!")
+                        return null
+                    }
+
+                    val computedSig = generateHmac("$start:$lastSeen:$deviceId:$epoch")
+                    if (computedSig != expectedSignature) {
+                        Log.w(tag, "Trial token signature invalid!")
+                        return null
+                    }
+
+                    TrialToken(start, lastSeen, epoch)
                 }
+                4 -> {
+                    val start = parts[0].toLongOrNull() ?: return null
+                    val lastSeen = parts[1].toLongOrNull() ?: return null
+                    val deviceId = parts[2]
+                    val expectedSignature = parts[3]
 
-                // Verify HMAC signature
-                val computedSig = generateHmac("$start:$lastSeen:$deviceId")
-                if (computedSig != expectedSignature) {
-                    Log.w(tag, "Trial token signature invalid!")
-                    return null
+                    if (deviceId != getDeviceId()) {
+                        Log.w(tag, "Trial token device ID mismatch!")
+                        return null
+                    }
+
+                    val computedSig = generateHmac("$start:$lastSeen:$deviceId")
+                    if (computedSig != expectedSignature) {
+                        Log.w(tag, "Trial token signature invalid!")
+                        return null
+                    }
+
+                    // Legacy v2 tokens were created starting in Epoch 3 (v1.5.3+)
+                    TrialToken(start, lastSeen, 3)
                 }
-
-                Pair(start, lastSeen)
-            } else null
+                else -> null
+            }
         } catch (e: Exception) {
             null
         }

@@ -159,7 +159,7 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
 
     override fun purchasePro(activity: Activity) {
         val cachedDetails = proProductDetails
-        if (cachedDetails != null) {
+        if (cachedDetails != null && billingClient?.isReady == true) {
             launchFlow(activity, cachedDetails)
             return
         }
@@ -191,7 +191,17 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
             .setProductDetailsParamsList(productDetailsParamsList)
             .build()
 
-        billingClient?.launchBillingFlow(activity, billingFlowParams)
+        val client = billingClient
+        if (client == null || !client.isReady) {
+            Toast.makeText(activity, "Google Play connection lost. Please try again.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val result = client.launchBillingFlow(activity, billingFlowParams)
+        if (result.responseCode != BillingClient.BillingResponseCode.OK) {
+            val msg = "Unable to open Google Play billing (${result.responseCode}): ${result.debugMessage}"
+            Log.w(tag, msg)
+            Toast.makeText(activity, msg, Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun restorePurchases(activity: Activity?) {
@@ -250,7 +260,11 @@ class PlaystoreBillingManager(private val appContext: Context) : BillingManager,
         } else if (billingResult.responseCode == BillingClient.BillingResponseCode.USER_CANCELED) {
             Log.d(tag, "User canceled the purchase.")
         } else {
-            Log.w(tag, "Purchase failed: ${billingResult.debugMessage} (code: ${billingResult.responseCode})")
+            val msg = "Purchase failed (${billingResult.responseCode}): ${billingResult.debugMessage}"
+            Log.w(tag, msg)
+            mainHandler.post {
+                Toast.makeText(appContext, msg, Toast.LENGTH_LONG).show()
+            }
         }
     }
 
